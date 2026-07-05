@@ -150,17 +150,25 @@ def fmt(value, digits=None):
 def esc(value):
     return html.escape("" if pd.isna(value) else str(value))
 
-def make_sort_href(col_key, current_sort_col, current_sort_dir, current_date):
+# 引数に current_song と current_artist を追加
+def make_sort_href(col_key, current_sort_col, current_sort_dir, current_date, current_song, current_artist):
     next_dir = "desc"
     if col_key == current_sort_col:
         next_dir = "asc" if current_sort_dir == "desc" else "desc"
     
     params = {"sort_col": col_key, "sort_dir": next_dir}
+    
+    # 現在のフィルタ状態を維持する
     if current_date:
         params["date"] = current_date
+    if current_song:
+        params["song"] = current_song
+    if current_artist:
+        params["artist"] = current_artist
+        
     return "?" + urlencode(params)
 
-def render_dxg_table(df, current_sort_col, current_sort_dir, current_date):
+def render_dxg_table(df, current_sort_col, current_sort_dir, current_date, current_song, current_artist):
     rows_html = []
 
     headers_html = ['<th class="no-col">No.</th>']
@@ -172,7 +180,7 @@ def render_dxg_table(df, current_sort_col, current_sort_dir, current_date):
         links_html = []
         
         for col_key, label in items:
-            href = make_sort_href(col_key, current_sort_col, current_sort_dir, current_date)
+            href = make_sort_href(col_key, current_sort_col, current_sort_dir, current_date, current_song, current_artist)
             
             active_class = ""
             if col_key == current_sort_col:
@@ -212,8 +220,17 @@ def render_dxg_table(df, current_sort_col, current_sort_dir, current_date):
         bg = score_color(r["total_score"], r["bonus_score"])
         play_date = "" if pd.isna(r["play_date"]) else str(r["play_date"])
         
+        # 楽曲・アーティスト名の取得
+        song_val = str(r["song_name"]) if not pd.isna(r["song_name"]) else ""
+        artist_val = str(r["artist_name"]) if not pd.isna(r["artist_name"]) else ""
+        
+        # 日付リンク用（曲フィルタはリセットして日付だけにする）
         date_params = {"date": play_date, "sort_col": current_sort_col, "sort_dir": current_sort_dir}
         date_href = f"?{urlencode(date_params)}" if play_date else "#"
+
+        # 楽曲リンク用（日付フィルタはリセットして特定の曲の全履歴を出す）
+        song_params = {"song": song_val, "artist": artist_val, "sort_col": current_sort_col, "sort_dir": current_sort_dir}
+        song_href = f"?{urlencode(song_params)}" if song_val else "#"
 
         rows_html.append(f"""
         <tr class="record-top">
@@ -232,24 +249,26 @@ def render_dxg_table(df, current_sort_col, current_sort_dir, current_date):
         <tr>
           <td></td>
           <td class="meta-cell">
-            <div class="clip song">{esc(r["song_name"])}</div>
+            <a href="{song_href}" target="_self" class="clip song">{esc(song_val)}</a>
           </td>
           <td>{fmt(r["bonus_score"], 3)}</td>
           <td>{fmt(r["vibrato_longtone"])}</td>
           <td>{fmt(r["stability"])}</td>
           <td>{fmt(r["kobushi_count"])}</td>
           <td>{fmt(r["fall_count"])}</td>
-          <td>{fmt(r["vibrato_count"])}</td> </tr>
+          <td>{fmt(r["vibrato_count"])}</td> 
+        </tr>
         <tr class="record-bottom">
           <td></td>
           <td class="meta-cell">
-            <div class="clip artist">{esc(r["artist_name"])}</div>
+            <div class="clip artist">{esc(artist_val)}</div>
           </td>
           <td>{esc(r["bonus_type_short"])}</td>
           <td>{fmt(r["rhythm"])}</td>
           <td>{fmt(r["expressive"])}</td>
           <td>{fmt(r["longtone_skill"])}</td>
-          <td>{fmt(r["vibrato_skill"])}</td> <td>{esc(r["vibrato_type_label"])}</td>
+          <td>{fmt(r["vibrato_skill"])}</td> 
+          <td>{esc(r["vibrato_type_label"])}</td>
         </tr>
         """)
 
@@ -363,7 +382,8 @@ DXG_CSS = """
   color: #1666aa;
 }
 
-.dxg-table .song {
+/* 曲名リンクの装飾設定 */
+.dxg-table a.song {
   color: #1670a8;
   text-align: left;
   text-decoration: underline;
@@ -420,20 +440,35 @@ st.caption(f"読み込みCSV: {csv_path}")
 raw = read_csv_safely(csv_path)
 df = normalize(raw)
 
+# URLパラメータの取得に追加
 selected_date = get_query_param("date")
+selected_song = get_query_param("song")
+selected_artist = get_query_param("artist")
+
 sort_col = get_query_param("sort_col") or "total_score"
 sort_dir = get_query_param("sort_dir") or "desc"
 
+# 適用中のフィルタの表示処理
+active_filters = []
 if selected_date:
-    st.info(f"日付フィルタ適用中: {selected_date}")
+    active_filters.append(f"日付: {selected_date}")
+if selected_song and selected_artist:
+    active_filters.append(f"楽曲: {selected_song} ({selected_artist})")
+
+if active_filters:
+    st.info(f"フィルタ適用中: {' ｜ '.join(active_filters)}")
     st.markdown('<a href="?" target="_self" class="clear-filter-btn">❌ フィルタを解除して全件表示に戻る</a>', unsafe_allow_html=True)
 
 keyword = st.text_input("曲名・歌手名検索", "")
 
 view = df.copy()
 
+# フィルタ実行
 if selected_date:
     view = view[view["play_date"] == selected_date]
+
+if selected_song and selected_artist:
+    view = view[(view["song_name"] == selected_song) & (view["artist_name"] == selected_artist)]
 
 if keyword:
     mask = (
@@ -444,19 +479,17 @@ if keyword:
 
 # --- ここで並び替えの対応関係を制御 ---
 if sort_col in view.columns:
-    # ユーザー要望：曲名、歌手名、ビタは青赤の挙動を逆にする
     if sort_col in ["song_name", "artist_name", "vibrato_type_code"]:
-        # 赤(desc)の時に 昇順(True) = A〜Z順 になるように反転
         is_ascending = (sort_dir == "desc")
     else:
-        # それ以外（点数や各種回数など）は 赤(desc)の時に 降順(False) = 大きい順
         is_ascending = (sort_dir == "asc")
 
     view = view.sort_values(sort_col, ascending=is_ascending)
 
 st.write(f"表示件数: {len(view)} 件")
 
-html_string = DXG_CSS + '<div class="wrapper">' + render_dxg_table(view, sort_col, sort_dir, selected_date) + "</div>"
+# render_dxg_table に current_song と current_artist も渡す
+html_string = DXG_CSS + '<div class="wrapper">' + render_dxg_table(view, sort_col, sort_dir, selected_date, selected_song, selected_artist) + "</div>"
 
 clean_html = "\n".join([line.strip() for line in html_string.split("\n")])
 
