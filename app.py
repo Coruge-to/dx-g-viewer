@@ -18,7 +18,6 @@ BONUS_SHORT_MAP = {
     "表現力ボーナス": "表",
 }
 
-# --- スマホ用（SP）ヘッダー構造 ---
 HEADER_CONFIG_SP = [
     {"align": "right",  "items": [("play_dt", "日付"), ("song_name", "曲名"), ("artist_name", "歌手名")]},
     {"align": "center", "items": [("total_score", "点数")]},
@@ -30,7 +29,6 @@ HEADER_CONFIG_SP = [
     {"align": "right",  "items": [("vibrato_seconds", "ビ秒"), ("vibrato_count", "ビ回"), ("vibrato_type_code", "ビタ")]},
 ]
 
-# --- PC用ヘッダー構造（一列表示） ---
 HEADER_CONFIG_PC = [
     ("play_dt", "日付"), ("song_name", "曲名 / 歌手名"), ("total_score", "点数"),
     ("base_score", "素点"), ("bonus_score", "ボ点"), ("bonus_type_short", "ボタ"),
@@ -40,6 +38,37 @@ HEADER_CONFIG_PC = [
     ("longtone_skill", "ロ"), ("vibrato_skill", "ビ"), ("vibrato_seconds", "ビ秒"),
     ("vibrato_count", "ビ回"), ("vibrato_type_code", "ビタ")
 ]
+
+PC_NUM_RIGHT_KEYS = {
+    "base_score", "bonus_score", "chart_total", "pitch", "stability",
+    "expressive", "rhythm", "vibrato_longtone", "emphasis",
+    "shakuri_count", "kobushi_count", "fall_count",
+    "longtone_skill", "vibrato_skill", "vibrato_seconds", "vibrato_count",
+}
+
+
+# =========================================================
+# HTMLビルダーヘルパー
+# =========================================================
+_LT = chr(60)
+_GT = chr(62)
+
+def tag_open(name, **attrs):
+    parts = [_LT, name]
+    for k, v in attrs.items():
+        if v is None or v == "":
+            continue
+        key = "class" if k == "cls" else k
+        parts.append(' ' + key + '="' + str(v) + '"')
+    parts.append(_GT)
+    return "".join(parts)
+
+def tag_close(name):
+    return _LT + "/" + name + _GT
+
+def anchor(href, text, cls=None, target="_self"):
+    return tag_open("a", href=href, target=target, cls=cls) + text + tag_close("a")
+
 
 def get_latest_csv():
     files = sorted(BACKUP_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -77,7 +106,7 @@ def normalize(df):
         "stability": pick_col(df, ["安定性", "radarChartStability"]),
         "expressive": pick_col(df, ["表現力", "radarChartExpressive"]),
         "rhythm": pick_col(df, ["リズム", "radarChartRhythm"]),
-        "vl": pick_col(df, ["ビブラート/ロングトーン", "ビブラート／ロングトーン", "radarChartVibratoLongtone"]),
+        "vl": pick_col(df, ["ビブラート/ロングトーン", "ビブラート/ロングトーン", "radarChartVibratoLongtone"]),
         "vib_count": pick_col(df, ["ビブラート回数", "vibratoCount"]),
         "vib_skill": pick_col(df, ["ビブラート上手さ", "vibratoSkill"]),
         "vib_sec": pick_col(df, ["ビブラート秒数", "vibratoTotalSecond"]),
@@ -158,7 +187,7 @@ def make_sort_href(col_key, current_sort_col, current_sort_dir, current_date, cu
     next_dir = "desc"
     if col_key == current_sort_col:
         next_dir = "asc" if current_sort_dir == "desc" else "desc"
-    
+
     params = {"sort_col": col_key, "sort_dir": next_dir, "mode": current_mode}
     if current_date: params["date"] = current_date
     if current_song: params["song"] = current_song
@@ -166,146 +195,225 @@ def make_sort_href(col_key, current_sort_col, current_sort_dir, current_date, cu
     if current_search: params["search"] = current_search
     return "?" + urlencode(params)
 
-# --- 検索バー iframe 生成（JavaScriptによる親画面URL更新機能付き） ---
 def get_search_iframe_srcdoc(keyword):
-    srcdoc = f"""
+    srcdoc = """
     <!DOCTYPE html>
     <html><head><style>
-      body {{ margin: 0; padding: 0; background: transparent; font-family: sans-serif; }}
-      form {{ margin: 0; display: flex; }}
-      input {{
+      body { margin: 0; padding: 0; background: transparent; font-family: sans-serif; }
+      form { margin: 0; display: flex; }
+      input {
         width: 100%; height: 32px; padding: 6px 12px; border: 1px solid #ccc;
         border-radius: 4px; color: #333; font-size: 14px; outline: none; box-sizing: border-box;
-      }}
-      input:focus {{ border-color: #1666aa; box-shadow: 0 0 4px rgba(22,102,170,0.3); }}
-      input::placeholder {{ color: #aaa; }}
+      }
+      input:focus { border-color: #1666aa; box-shadow: 0 0 4px rgba(22,102,170,0.3); }
+      input::placeholder { color: #aaa; }
     </style>
     <script>
-      function submitSearch(e, form) {{
+      function submitSearch(e, form) {
         e.preventDefault();
         var val = form.search.value;
         var topUrl = new URL(window.top.location.href);
-        if (val) {{
+        if (val) {
           topUrl.searchParams.set('search', val);
-        }} else {{
+        } else {
           topUrl.searchParams.delete('search');
-        }}
+        }
         window.top.location.href = topUrl.toString();
-      }}
+      }
     </script>
     </head>
     <body>
       <form onsubmit='submitSearch(event, this)'>
-        <input type='text' name='search' value='{html.escape(keyword)}' placeholder='🔍 曲名 or 歌手名'>
+        <input type='text' name='search' value='__KW__' placeholder='\U0001F50D 曲名 or 歌手名'>
       </form>
     </body></html>
     """
+    srcdoc = srcdoc.replace("__KW__", html.escape(keyword))
     return html.escape(srcdoc)
 
+
 def render_sp_table(df, sort_col, sort_dir, date, song, artist, mode, search):
-    rows_html = []
-    headers_html = ['<th class="no-col">No.</th>']
-    for col_data in HEADER_CONFIG_SP:
+    parts = []
+    header_cells = []
+
+    for idx, col_data in enumerate(HEADER_CONFIG_SP):
         align = col_data["align"]
         items = col_data["items"]
-        links_html = []
-        for col_key, label in items:
+        links = []
+        for i, (col_key, label) in enumerate(items):
             href = make_sort_href(col_key, sort_col, sort_dir, date, song, artist, mode, search)
-            active_class = (" active-desc" if sort_dir == "desc" else " active-asc") if col_key == sort_col else ""
-            links_html.append(f'<a href="{href}" target="_self" class="sort-link{active_class}">{label}</a>')
-        headers_html.append(f'<th class="col-header {align}-align"><div class="header-container">{"".join(links_html)}</div></th>')
+            active_class = ("active-desc" if sort_dir == "desc" else "active-asc") if col_key == sort_col else ""
+            link_cls = ("sort-link " + active_class).strip()
 
-    rows_html.append(f'<table class="dxg-table sp-table"><thead><tr>{"".join(headers_html)}</tr></thead><tbody>')
+            if idx == 0 and i == 0:
+                inner = (
+                    '<div class="sp-nodate-header">'
+                    + '<div class="sp-no-label">No.</div>'
+                    + anchor(href, label, cls=(link_cls + " sp-date-label").strip())
+                    + '</div>'
+                )
+                links.append(inner)
+            else:
+                links.append(anchor(href, label, cls=link_cls))
+
+        cell = (
+            '<th class="col-header ' + align + '-align">'
+            + '<div class="header-container">' + "".join(links) + '</div>'
+            + 'th>'
+        )
+        header_cells.append(cell)
+
+    parts.append('<table class="dxg-table sp-table"><thead><tr>' + "".join(header_cells) + '</tr></thead><tbody>')
 
     for i, r in df.reset_index(drop=True).iterrows():
         bg = score_color(r["total_score"], r["bonus_score"])
         d_val = "" if pd.isna(r["play_date"]) else str(r["play_date"])
         s_val = str(r["song_name"]) if not pd.isna(r["song_name"]) else ""
         a_val = str(r["artist_name"]) if not pd.isna(r["artist_name"]) else ""
-        
-        date_href = f"?{urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': mode, 'search': search})}" if d_val else "#"
-        song_href = f"?{urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': mode, 'search': search})}" if s_val else "#"
 
-        rows_html.append(f"""
-        <tr class="record-top">
-          <td>{i+1}</td>
-          <td class="meta-cell"><a href="{date_href}" target="_self" class="date-text">{esc(d_val)}</a></td>
-          <td rowspan="3" class="score-cell" style="background:{bg};">{fmt(r["total_score"], 3)}</td>
-          <td>{fmt(r["base_score"], 3)}</td><td>{fmt(r["chart_total"])}</td><td>{fmt(r["pitch"])}</td><td>{fmt(r["emphasis"])}</td><td>{fmt(r["shakuri_count"])}</td><td>{fmt(r["vibrato_seconds"], 1)}</td>
-        </tr>
-        <tr>
-          <td></td><td class="meta-cell"><a href="{song_href}" target="_self" class="clip song">{esc(s_val)}</a></td>
-          <td>{fmt(r["bonus_score"], 3)}</td><td>{fmt(r["vibrato_longtone"])}</td><td>{fmt(r["stability"])}</td><td>{fmt(r["kobushi_count"])}</td><td>{fmt(r["fall_count"])}</td><td>{fmt(r["vibrato_count"])}</td> 
-        </tr>
-        <tr class="record-bottom">
-          <td></td><td class="meta-cell"><div class="clip artist">{esc(a_val)}</div></td>
-          <td>{esc(r["bonus_type_short"])}</td><td>{fmt(r["rhythm"])}</td><td>{fmt(r["expressive"])}</td><td>{fmt(r["longtone_skill"])}</td><td>{fmt(r["vibrato_skill"])}</td><td>{esc(r["vibrato_type_label"])}</td>
-        </tr>
-        """)
-    rows_html.append("</tbody></table>")
-    return "".join(rows_html)
+        date_href = "?" + urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if d_val else "#"
+        song_href = "?" + urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if s_val else "#"
+
+        date_link = anchor(date_href, esc(d_val), cls="date-text sp-date-val")
+        song_link = anchor(song_href, esc(s_val), cls="clip song")
+
+        row1 = (
+            '<tr class="record-top">'
+            + '<td class="meta-cell">'
+            +   '<div class="sp-nodate-row">'
+            +     '<span class="sp-no-num">' + str(i+1) + '</span>'
+            +     date_link
+            +   '</div>'
+            + '</td>'
+            + '<td rowspan="3" class="score-cell" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
+            + '<td>' + fmt(r["base_score"], 3) + '</td>'
+            + '<td>' + fmt(r["chart_total"]) + '</td>'
+            + '<td>' + fmt(r["pitch"]) + '</td>'
+            + '<td>' + fmt(r["emphasis"]) + '</td>'
+            + '<td>' + fmt(r["shakuri_count"]) + '</td>'
+            + '<td>' + fmt(r["vibrato_seconds"], 1) + '</td>'
+            + '</tr>'
+        )
+        # 不要なスペーサーを削除し、曲名・歌手名が左端から表示されるように修正
+        row2 = (
+            '<tr>'
+            + '<td class="meta-cell">'
+            +   '<div class="sp-nodate-row">'
+            +     '<div class="sp-song-val">' + song_link + '</div>'
+            +   '</div>'
+            + '</td>'
+            + '<td>' + fmt(r["bonus_score"], 3) + '</td>'
+            + '<td>' + fmt(r["vibrato_longtone"]) + '</td>'
+            + '<td>' + fmt(r["stability"]) + '</td>'
+            + '<td>' + fmt(r["kobushi_count"]) + '</td>'
+            + '<td>' + fmt(r["fall_count"]) + '</td>'
+            + '<td>' + fmt(r["vibrato_count"]) + '</td>'
+            + '</tr>'
+        )
+        row3 = (
+            '<tr class="record-bottom">'
+            + '<td class="meta-cell">'
+            +   '<div class="sp-nodate-row">'
+            +     '<div class="sp-artist-val clip artist">' + esc(a_val) + '</div>'
+            +   '</div>'
+            + '</td>'
+            + '<td>' + esc(r["bonus_type_short"]) + '</td>'
+            + '<td>' + fmt(r["rhythm"]) + '</td>'
+            + '<td>' + fmt(r["expressive"]) + '</td>'
+            + '<td>' + fmt(r["longtone_skill"]) + '</td>'
+            + '<td>' + fmt(r["vibrato_skill"]) + '</td>'
+            + '<td>' + esc(r["vibrato_type_label"]) + '</td>'
+            + '</tr>'
+        )
+        parts.append(row1 + row2 + row3)
+
+    parts.append("</tbody></table>")
+    return "".join(parts)
+
 
 def render_pc_table(df, sort_col, sort_dir, date, song, artist, mode, search):
-    rows_html = []
-    headers_html = ['<th class="no-col pc-th-first">No.</th>']
+    parts = []
+    header_cells = ['<th class="no-col pc-th-first">No.</th>']
+
     for col_key, label in HEADER_CONFIG_PC:
         href = make_sort_href(col_key, sort_col, sort_dir, date, song, artist, mode, search)
-        active_class = (" active-desc" if sort_dir == "desc" else " active-asc") if col_key == sort_col else ""
-        
-        if col_key == "play_dt":
-            w_class = " pc-th-date"
-        elif col_key == "song_name":
-            w_class = " pc-th-song"
-        else:
-            w_class = " pc-th-normal"
-            
-        headers_html.append(f'<th class="{w_class}"><a href="{href}" target="_self" class="sort-link{active_class}">{label}</a></th>')
+        active_class = ("active-desc" if sort_dir == "desc" else "active-asc") if col_key == sort_col else ""
+        link_cls = ("sort-link " + active_class).strip()
 
-    rows_html.append(f'<table class="dxg-table pc-table"><thead><tr>{"".join(headers_html)}</tr></thead><tbody>')
+        if col_key == "play_dt":
+            w_class = "pc-th-date"
+        elif col_key == "song_name":
+            w_class = "pc-th-song"
+        else:
+            w_class = "pc-th-normal"
+
+        header_cells.append('<th class="' + w_class + '">' + anchor(href, label, cls=link_cls) + '</th>')
+
+    parts.append('<table class="dxg-table pc-table"><thead><tr>' + "".join(header_cells) + '</tr></thead><tbody>')
+
+    def td_num(key, value):
+        cls_attr = ' class="num-right"' if key in PC_NUM_RIGHT_KEYS else ''
+        return '<td' + cls_attr + '>' + str(value) + '</td>'
 
     for i, r in df.reset_index(drop=True).iterrows():
         bg = score_color(r["total_score"], r["bonus_score"])
         d_val = "" if pd.isna(r["play_date"]) else str(r["play_date"])
         s_val = str(r["song_name"]) if not pd.isna(r["song_name"]) else ""
         a_val = str(r["artist_name"]) if not pd.isna(r["artist_name"]) else ""
-        
-        date_href = f"?{urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': mode, 'search': search})}" if d_val else "#"
-        song_href = f"?{urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': mode, 'search': search})}" if s_val else "#"
 
-        rows_html.append(f"""
-        <tr>
-          <td>{i+1}</td>
-          <td><a href="{date_href}" target="_self" class="date-text">{esc(d_val)}</a></td>
-          <td class="meta-cell-pc"><a href="{song_href}" target="_self" class="song-pc">{esc(s_val)}</a> <span class="artist-pc">/ {esc(a_val)}</span></td>
-          <td class="score-cell-pc" style="background:{bg};">{fmt(r["total_score"], 3)}</td>
-          <td>{fmt(r["base_score"], 3)}</td>
-          <td>{fmt(r["bonus_score"], 3)}</td>
-          <td>{esc(r["bonus_type_short"])}</td>
-          <td>{fmt(r["chart_total"])}</td>
-          <td>{fmt(r["pitch"])}</td>
-          <td>{fmt(r["stability"])}</td>
-          <td>{fmt(r["expressive"])}</td>
-          <td>{fmt(r["rhythm"])}</td>
-          <td>{fmt(r["vibrato_longtone"])}</td>
-          <td>{fmt(r["emphasis"])}</td>
-          <td>{fmt(r["shakuri_count"])}</td>
-          <td>{fmt(r["kobushi_count"])}</td>
-          <td>{fmt(r["fall_count"])}</td>
-          <td>{fmt(r["longtone_skill"])}</td>
-          <td>{fmt(r["vibrato_skill"])}</td>
-          <td>{fmt(r["vibrato_seconds"], 1)}</td>
-          <td>{fmt(r["vibrato_count"])}</td>
-          <td>{esc(r["vibrato_type_label"])}</td>
-        </tr>
-        """)
-    rows_html.append("</tbody></table>")
-    return "".join(rows_html)
+        date_href = "?" + urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if d_val else "#"
+        song_href = "?" + urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if s_val else "#"
+
+        date_link = anchor(date_href, esc(d_val), cls="date-text")
+        song_link = anchor(song_href, esc(s_val), cls="song-pc")
+
+        row = (
+            '<tr>'
+            + '<td>' + str(i+1) + '</td>'
+            + '<td>' + date_link + '</td>'
+            + '<td class="meta-cell-pc">' + song_link + ' <span class="artist-pc">/ ' + esc(a_val) + '</span></td>'
+            + '<td class="score-cell-pc" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
+            + td_num("base_score", fmt(r["base_score"], 3))
+            + td_num("bonus_score", fmt(r["bonus_score"], 3))
+            + '<td>' + esc(r["bonus_type_short"]) + '</td>'
+            + td_num("chart_total", fmt(r["chart_total"]))
+            + td_num("pitch", fmt(r["pitch"]))
+            + td_num("stability", fmt(r["stability"]))
+            + td_num("expressive", fmt(r["expressive"]))
+            + td_num("rhythm", fmt(r["rhythm"]))
+            + td_num("vibrato_longtone", fmt(r["vibrato_longtone"]))
+            + td_num("emphasis", fmt(r["emphasis"]))
+            + td_num("shakuri_count", fmt(r["shakuri_count"]))
+            + td_num("kobushi_count", fmt(r["kobushi_count"]))
+            + td_num("fall_count", fmt(r["fall_count"]))
+            + td_num("longtone_skill", fmt(r["longtone_skill"]))
+            + td_num("vibrato_skill", fmt(r["vibrato_skill"]))
+            + td_num("vibrato_seconds", fmt(r["vibrato_seconds"], 1))
+            + td_num("vibrato_count", fmt(r["vibrato_count"]))
+            + '<td>' + esc(r["vibrato_type_label"]) + '</td>'
+            + '</tr>'
+        )
+        parts.append(row)
+
+    parts.append("</tbody></table>")
+    return "".join(parts)
+
 
 st.set_page_config(page_title="DX-G Viewer", layout="wide")
 
 DXG_CSS = """
 <style>
-/* --- 全体共通 --- */
+/* Streamlit の block-container 幅段階変化を殺す（864px対策） */
+[data-testid="stMainBlockContainer"],
+section.main > div.block-container,
+.stApp .main .block-container,
+.stApp .block-container {
+  max-width: 100% !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+  padding-top: 1rem !important;
+}
+
 .dxg-table {
   border-collapse: collapse;
   font-family: Arial, "Yu Gothic", sans-serif;
@@ -319,20 +427,31 @@ DXG_CSS = """
   white-space: nowrap;
 }
 
-/* --- ヘッダースクロール追従の完全固定（Streamlitバー対策） --- */
+/* 二段sticky */
+.custom-nav {
+  position: sticky;
+  top: 0;
+  z-index: 300;
+  background: #ffffff;
+}
+.sp-search-bar, .sp-dropdown {
+  position: sticky;
+  top: 56px;
+  z-index: 250;
+  background: #f8f8f8;
+}
 .dxg-table thead th {
   position: sticky;
-  top: 56px; /* Streamlitのデフォルトヘッダー分（約56px）を避ける */
+  top: 56px;
   z-index: 100;
   background-color: #f8f8f8 !important;
   font-weight: bold;
   color: #222;
   padding: 0 !important;
   height: 1px;
-  box-shadow: 0 -1px 0 #bdbdbd, 0 1px 0 #bdbdbd; 
+  box-shadow: 0 -1px 0 #bdbdbd, 0 1px 0 #bdbdbd;
 }
 
-/* No.カラムのアライメント修正 */
 .dxg-table th.no-col { text-align: left !important; padding-left: 8px !important; }
 .dxg-table td:first-child { text-align: right !important; padding-right: 8px !important; }
 
@@ -343,13 +462,12 @@ DXG_CSS = """
 }
 .sort-link:hover { background: rgba(0,0,0,0.05); }
 .sort-link.active-desc { background: #b00000 !important; color: white !important; }
-.sort-link.active-asc { background: #0044b0 !important; color: white !important; }
+.sort-link.active-asc  { background: #0044b0 !important; color: white !important; }
 
-/* --- カスタムナビゲーション (1440px統一) --- */
 .custom-nav {
   display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 2px solid #ddd; padding: 0 10px; margin-bottom: 15px;
-  max-width: 1440px; /* 表と端を揃える */
+  border-bottom: 2px solid #ddd; padding: 0 10px;
+  max-width: 1440px;
   margin: 0 auto 15px auto;
 }
 .nav-brand { font-size: 24px; font-weight: bold; color: #1666aa; }
@@ -363,110 +481,179 @@ DXG_CSS = """
 
 .pc-search-form { margin-right: 20px; display: flex; align-items: center; }
 
-/* SP用アイコン・隠しメニュー */
 .nav-sp-icons { display: none; font-size: 20px; color: #555; gap: 10px; align-items: center; }
 .icon-label { cursor: pointer; padding: 6px 10px; border: 1px solid #ddd; background: #f8f8f8; border-radius: 4px; user-select: none; }
 .icon-label:active { background: #eee; }
 .hidden-toggle { display: none; }
 
-.sp-search-bar { display: none; padding: 10px; background: #f8f8f8; border-bottom: 1px solid #ddd; margin-bottom: 15px; }
+.sp-search-bar { display: none; padding: 10px; border-bottom: 1px solid #ddd; margin-bottom: 15px; }
 #search-toggle:checked ~ .sp-search-bar { display: block; }
 
-.sp-dropdown { display: none; flex-direction: column; background: #f8f8f8; border-bottom: 1px solid #ddd; margin-bottom: 15px; }
+.sp-dropdown { display: none; flex-direction: column; border-bottom: 1px solid #ddd; margin-bottom: 15px; }
 .sp-dropdown a { padding: 12px; border-bottom: 1px solid #eee; color: #333 !important; text-decoration: none !important; font-weight: bold;}
 #menu-toggle:checked ~ .sp-dropdown { display: flex; }
 
-/* --- 全体のスクロール制限を解除 --- */
 .view-pc, .view-sp {
   padding-bottom: 40px;
   overflow: visible !important;
 }
 
-/* --- PC専用スタイル（1440px統一 & カラム比率調整） --- */
-.pc-table-wrapper {
-  max-width: 1440px; /* 大画面での間延びを防ぎ、ナビゲーションと揃える */
-  margin: 0 auto;
-}
-.pc-table { 
-  width: 100%; 
-  table-layout: fixed; 
-}
-.pc-table td { 
-  text-align: center; 
-  font-size: 14px !important;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.pc-table a, .pc-table span {
-  font-size: 14px !important;
+.pc-table-wrapper { max-width: 1440px; margin: 0 auto; }
+.pc-table { width: 100%; table-layout: fixed; }
+.pc-table td { text-align: center; font-size: 14px !important; overflow: hidden; white-space: nowrap; }
+.pc-table a, .pc-table span { font-size: 14px !important; }
+
+/* PC版：指定16項目の数値セルだけ右揃え */
+.pc-table td.num-right {
+  text-align: right !important;
+  padding-right: 10px !important;
+  font-variant-numeric: tabular-nums;
 }
 
-/* PC版 各列の横幅比率（合計100%） - 曲名列の伸びすぎを防止 */
-.pc-table th:nth-child(1) { width: 3.5%; }  /* No. */
-.pc-table th:nth-child(2) { width: 7.0%; }  /* Date */
-.pc-table th:nth-child(3) { width: 19.5%; } /* Song/Artist (-2%削減) */
-.pc-table th:nth-child(4) { width: 7.0%; }  /* Score */
-.pc-table th:nth-child(5) { width: 7.0; }  /* Base */
-.pc-table th:nth-child(6) { width: 5.0%; }  /* Bonus */
-.pc-table th:nth-child(7) { width: 3.5%; }  /* BonType (+1%追加) */
-.pc-table th:nth-child(8) { width: 3.5%; }  /* Chart */
+.pc-table th:nth-child(1) { width: 3.5%; }
+.pc-table th:nth-child(2) { width: 7.0%; }
+.pc-table th:nth-child(3) { width: 23.0%; }
+.pc-table th:nth-child(4) { width: 7.0%; }
+.pc-table th:nth-child(5) { width: 7.0%; }
+.pc-table th:nth-child(6) { width: 5.0%; }
+.pc-table th:nth-child(7) { width: 4.0%; }
+.pc-table th:nth-child(8) { width: 3.5%; }
 .pc-table th:nth-child(9), .pc-table th:nth-child(10), .pc-table th:nth-child(11),
-.pc-table th:nth-child(12), .pc-table th:nth-child(13), .pc-table th:nth-child(14) { width: 3.5%; } /* 音〜抑 */
+.pc-table th:nth-child(12), .pc-table th:nth-child(13), .pc-table th:nth-child(14) { width: 3.5%; }
 .pc-table th:nth-child(15), .pc-table th:nth-child(16), .pc-table th:nth-child(17),
-.pc-table th:nth-child(18), .pc-table th:nth-child(19) { width: 2.5%; } /* し〜ビ */
-.pc-table th:nth-child(20) { width: 3.5%; } /* V-Sec */
-.pc-table th:nth-child(21) { width: 3.5%; } /* V-Cnt (+1%追加) */
-.pc-table th:nth-child(22) { width: 3.5%; } /* V-Type */
+.pc-table th:nth-child(18), .pc-table th:nth-child(19) { width: 2.5%; }
+.pc-table th:nth-child(20) { width: 3.5%; }
+.pc-table th:nth-child(21) { width: 3.5%; }
+.pc-table th:nth-child(22) { width: 3.5%; }
 
-.meta-cell-pc { 
-  text-align: left !important; 
-  text-overflow: ellipsis; 
-}
+.meta-cell-pc { text-align: left !important; text-overflow: ellipsis; }
 .song-pc { color: #1670a8; text-decoration: underline; }
 .artist-pc { color: #666; }
 
-/* --- SP専用スタイル --- */
 .header-container { display: flex; flex-direction: column; height: 100%; }
 .right-align .sort-link { justify-content: flex-end; }
-.sp-table .score-cell { text-align: center; font-weight: 500; box-shadow: inset 0 0 8px rgba(255,255,255,0.45); }
-.sp-table .meta-cell { text-align: left; }
+.sp-table .score-cell {
+  text-align: center;
+  font-weight: 500;
+  box-shadow: inset 0 0 8px rgba(255,255,255,0.45);
+  border-bottom: 2px solid #666;
+}
+.sp-table .meta-cell { text-align: left; padding: 0 !important; }
 .sp-table .clip { display: block; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .sp-table .song { color: #1670a8; text-decoration: underline; }
 .sp-table .artist { color: #333; text-decoration: none; }
-.sp-table .record-top td { border-top: 2px solid #666; } 
+.sp-table .record-top td { border-top: 2px solid #666; }
 .sp-table .record-bottom td { border-bottom: 2px solid #666; }
 .date-text { color: #1666aa; text-decoration: underline; }
 
-/* --- レスポンシブ切り替え --- */
-@media screen and (min-width: 1181px) {
+/* SP版：No.（左揃え・42px）＋ 日付/曲名/歌手名（縦線を全3行に貫通） */
+.sp-nodate-header {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+}
+.sp-no-label {
+  flex: 0 0 42px;
+  min-width: 42px;
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-weight: bold;
+  color: #222;
+  font-size: 11px;
+  border-right: 1px solid #bdbdbd;
+  box-sizing: border-box;
+}
+.sp-date-label {
+  flex: 1 1 auto;
+  justify-content: center !important;
+}
+
+/* 本文3行共通のflex行 */
+.sp-nodate-row {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 100%;
+}
+
+/* 1行目：No.の数値 */
+.sp-no-num {
+  flex: 0 0 42px;
+  min-width: 42px;
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: #222;
+  border-right: 1px solid #bdbdbd;
+  box-sizing: border-box;
+}
+/* 1行目：日付 */
+.sp-date-val {
+  flex: 1 1 auto;
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 2行目：曲名（左寄せ） */
+.sp-song-val {
+  flex: 1 1 auto;
+  padding: 3px 4px;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+}
+/* 3行目：歌手名（左寄せ） */
+.sp-artist-val {
+  flex: 1 1 auto;
+  padding: 3px 4px;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+}
+
+@media screen and (min-width: 900px) {
   .view-sp, .sp-search-bar, .sp-dropdown, .hidden-toggle { display: none !important; }
   .view-pc { display: block; width: 100%; }
 }
-@media screen and (max-width: 1180px) {
+@media screen and (max-width: 899px) {
   .view-pc { display: none !important; }
-  .view-sp { display: block; width: 100%; } 
-  
+  .view-sp { display: block; width: 100%; }
+
   .nav-tabs { display: none; }
   .nav-sp-icons { display: flex; }
-  
+
   .sp-table { width: 100%; table-layout: fixed; font-size: 11px !important; }
   .sp-table th, .sp-table td { padding: 3px 1px; white-space: nowrap; overflow: hidden; }
-  
+  /* meta-cell は padding: 0 を維持（縦線を上下いっぱいに引くため） */
+  .sp-table td.meta-cell { padding: 0 !important; }
+
   .sp-table .header-container .sort-link { justify-content: center !important; }
 
-  /* スマホ版 横幅比率 */
-  .sp-table th:nth-child(1) { width: 10%; } 
-  .sp-table th:nth-child(2) { width: 28.5%; } 
-  .sp-table th:nth-child(3) { width: 14%; } 
-  .sp-table th:nth-child(4) { width: 12.5%; } 
-  .sp-table th:nth-child(5) { width: 9%; }  
-  .sp-table th:nth-child(6) { width: 6%; }  
-  .sp-table th:nth-child(7) { width: 6%; }  
-  .sp-table th:nth-child(8) { width: 6%; }  
-  .sp-table th:nth-child(9) { width: 8%; }  
-  
-  /* スマホ版の点数フォントサイズを 13.5px にナーフ */
-  .sp-table .score-cell { font-size: 12.5px !important; letter-spacing: -0.5px; } 
+  .sp-table th:nth-child(1) { width: 39.5%; }
+  .sp-table th:nth-child(2) { width: 14%; }
+  .sp-table th:nth-child(3) { width: 13%; }
+  .sp-table th:nth-child(4) { width: 7%; }
+  .sp-table th:nth-child(5) { width: 7%; }
+  .sp-table th:nth-child(6) { width: 7%; }
+  .sp-table th:nth-child(7) { width: 6%; }
+  .sp-table th:nth-child(8) { width: 6.5%; }
+
+  .sp-table .score-cell { font-size: 12px !important; letter-spacing: -0.7px; }
   .sp-table .sort-link { padding: 3px 2px; font-size: 11px; }
 }
 </style>
@@ -475,13 +662,12 @@ DXG_CSS = """
 csv_path = get_latest_csv()
 
 if csv_path is None:
-    st.error(f"CSVが見つかりません: {BACKUP_DIR}")
+    st.error("CSVが見つかりません: " + str(BACKUP_DIR))
     st.stop()
 
 raw = read_csv_safely(csv_path)
 df = normalize(raw)
 
-# URLパラメータ取得
 mode = get_query_param("mode") or "history"
 selected_date = get_query_param("date")
 selected_song = get_query_param("song")
@@ -491,7 +677,6 @@ keyword = get_query_param("search")
 sort_col = get_query_param("sort_col")
 sort_dir = get_query_param("sort_dir")
 
-# フィルタやモードによる並び順の初期設定
 if mode == "best":
     idx = df.groupby(['song_name', 'artist_name'])['total_score'].idxmax()
     df = df.loc[idx]
@@ -503,51 +688,46 @@ else:
         sort_col = "play_dt"
         sort_dir = "desc"
 
-# --- ナビゲーションバーのHTML生成 ---
 active_hist = "active" if mode == "history" else ""
 active_best = "active" if mode == "best" else ""
 search_checked = 'checked="checked"' if keyword else ""
 
-# 検索バーのiframe生成
 iframe_srcdoc = get_search_iframe_srcdoc(keyword)
 
-nav_html = f"""
-<div class="custom-nav">
-  <div class="nav-brand">精密集計DX-G</div>
-  
-  <div class="nav-tabs">
-    <div class="pc-search-form">
-      <iframe srcdoc="{iframe_srcdoc}" style="width: 220px; height: 32px; border: none; overflow: hidden;" scrolling="no" frameborder="0"></iframe>
-    </div>
-    <a href="?mode=history" target="_self" class="{active_hist}">歌唱履歴</a>
-    <a href="?mode=best" target="_self" class="{active_best}">曲別最高点</a>
-    <a href="#" target="_self">その他集計</a>
-  </div>
-  
-  <div class="nav-sp-icons">
-    <label for="search-toggle" class="icon-label">🔍</label>
-    <label for="menu-toggle" class="icon-label">☰</label>
-  </div>
-</div>
+nav_tab_hist = anchor("?mode=history", "歌唱履歴", cls=active_hist)
+nav_tab_best = anchor("?mode=best", "曲別最高点", cls=active_best)
+nav_tab_other = anchor("#", "その他集計")
 
-<input type="checkbox" id="search-toggle" class="hidden-toggle" {search_checked}>
-<div class="sp-search-bar">
-  <iframe srcdoc="{iframe_srcdoc}" style="width: 100%; height: 32px; border: none; overflow: hidden;" scrolling="no" frameborder="0"></iframe>
-</div>
+sp_tab_hist = anchor("?mode=history", "歌唱履歴", cls=active_hist)
+sp_tab_best = anchor("?mode=best", "曲別最高点", cls=active_best)
+sp_tab_other = anchor("#", "その他集計")
 
-<input type="checkbox" id="menu-toggle" class="hidden-toggle">
-<div class="sp-dropdown">
-  <a href="?mode=history" target="_self" class="{active_hist}">歌唱履歴</a>
-  <a href="?mode=best" target="_self" class="{active_best}">曲別最高点</a>
-  <a href="#" target="_self">その他集計</a>
-</div>
-"""
-
-st.markdown(DXG_CSS + nav_html, unsafe_allow_html=True)
+nav_html = (
+    '<div class="custom-nav">'
+    + '<div class="nav-brand">精密集計DX-G</div>'
+    + '<div class="nav-tabs">'
+    +   '<div class="pc-search-form">'
+    +     '<iframe srcdoc="' + iframe_srcdoc + '" style="width: 220px; height: 32px; border: none; overflow: hidden;" scrolling="no" frameborder="0"></iframe>'
+    +   '</div>'
+    +   nav_tab_hist + nav_tab_best + nav_tab_other
+    + '</div>'
+    + '<div class="nav-sp-icons">'
+    +   '<label for="search-toggle" class="icon-label">\U0001F50D</label>'
+    +   '<label for="menu-toggle" class="icon-label">\u2630</label>'
+    + '</div>'
+    + '</div>'
+    + '<input type="checkbox" id="search-toggle" class="hidden-toggle" ' + search_checked + '>'
+    + '<div class="sp-search-bar">'
+    +   '<iframe srcdoc="' + iframe_srcdoc + '" style="width: 100%; height: 32px; border: none; overflow: hidden;" scrolling="no" frameborder="0"></iframe>'
+    + '</div>'
+    + '<input type="checkbox" id="menu-toggle" class="hidden-toggle">'
+    + '<div class="sp-dropdown">'
+    +   sp_tab_hist + sp_tab_best + sp_tab_other
+    + '</div>'
+)
 
 view = df.copy()
 
-# フィルタ実行
 if selected_date:
     view = view[view["play_date"] == selected_date]
 if selected_song and selected_artist:
@@ -560,7 +740,6 @@ if keyword:
     )
     view = view[mask]
 
-# 並び替え実行
 if sort_col in view.columns:
     if sort_col in ["song_name", "artist_name", "vibrato_type_code"]:
         is_ascending = (sort_dir == "desc")
@@ -569,17 +748,20 @@ if sort_col in view.columns:
     view = view.sort_values(sort_col, ascending=is_ascending)
 
 active_filters = []
-if selected_date: active_filters.append(f"日付: {selected_date}")
-if selected_song and selected_artist: active_filters.append(f"楽曲: {selected_song}")
-if keyword: active_filters.append(f"検索: {keyword}")
+if selected_date: active_filters.append("日付: " + str(selected_date))
+if selected_song and selected_artist: active_filters.append("楽曲: " + str(selected_song))
+if keyword: active_filters.append("検索: " + str(keyword))
 
-# --- HTMLテーブルの生成と描画 ---
 html_sp = render_sp_table(view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
 html_pc = render_pc_table(view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
 
-html_string = f"""
-<div class="view-pc"><div class="pc-table-wrapper">{html_pc}</div></div>
-<div class="view-sp">{html_sp}</div>
-"""
-clean_html = "\n".join([line.strip() for line in html_string.split("\n")])
+html_string = (
+    '<div class="dxg-scroll-wrapper">'
+    + '<div class="view-pc"><div class="pc-table-wrapper">' + html_pc + '</div></div>'
+    + '<div class="view-sp">' + html_sp + '</div>'
+    + '</div>'
+)
+
+combined = DXG_CSS + nav_html + html_string
+clean_html = "\n".join([line.strip() for line in combined.split("\n")])
 st.markdown(clean_html, unsafe_allow_html=True)
