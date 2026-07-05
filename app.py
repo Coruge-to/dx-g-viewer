@@ -259,7 +259,7 @@ def render_sp_table(df, sort_col, sort_dir, date, song, artist, mode, search):
         cell = (
             '<th class="col-header ' + align + '-align">'
             + '<div class="header-container">' + "".join(links) + '</div>'
-            + 'th>'
+            + '</th>'
         )
         header_cells.append(cell)
 
@@ -294,7 +294,6 @@ def render_sp_table(df, sort_col, sort_dir, date, song, artist, mode, search):
             + '<td>' + fmt(r["vibrato_seconds"], 1) + '</td>'
             + '</tr>'
         )
-        # 不要なスペーサーを削除し、曲名・歌手名が左端から表示されるように修正
         row2 = (
             '<tr>'
             + '<td class="meta-cell">'
@@ -498,9 +497,25 @@ section.main > div.block-container,
   overflow: visible !important;
 }
 
+/* PC版：外枠および横線を太くする（スマホ版の 2px solid #666 と同様に） */
 .pc-table-wrapper { max-width: 1440px; margin: 0 auto; }
-.pc-table { width: 100%; table-layout: fixed; }
-.pc-table td { text-align: center; font-size: 14px !important; overflow: hidden; white-space: nowrap; }
+.pc-table { 
+  width: 100%; 
+  table-layout: fixed; 
+  border: 2px solid #666; /* 外枠を太く */
+}
+.pc-table td { 
+  text-align: center; 
+  font-size: 14px !important; 
+  overflow: hidden; 
+  white-space: nowrap; 
+  border-top: 2px solid #666 !important;    /* 各行の横線を太く */
+  border-bottom: 2px solid #666 !important; /* 各行の横線を太く */
+}
+.pc-table thead th {
+  /* PC版ヘッダーの上下境界も太くする */
+  box-shadow: 0 -2px 0 #666, 0 2px 0 #666 !important;
+}
 .pc-table a, .pc-table span { font-size: 14px !important; }
 
 /* PC版：指定16項目の数値セルだけ右揃え */
@@ -556,13 +571,11 @@ section.main > div.block-container,
 .sp-no-label {
   flex: 0 0 42px;
   min-width: 42px;
-  padding: 3px 4px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   font-weight: bold;
   color: #222;
-  font-size: 11px;
   border-right: 1px solid #bdbdbd;
   box-sizing: border-box;
 }
@@ -637,24 +650,39 @@ section.main > div.block-container,
   .nav-tabs { display: none; }
   .nav-sp-icons { display: flex; }
 
-  .sp-table { width: 100%; table-layout: fixed; font-size: 11px !important; }
+  /* SP版：表全体を2pxの黒線で囲う */
+  .sp-table { 
+    width: 100%; 
+    table-layout: fixed; 
+    font-size: 11px !important; 
+    border: 2px solid #666; 
+  }
   .sp-table th, .sp-table td { padding: 3px 1px; white-space: nowrap; overflow: hidden; }
   /* meta-cell は padding: 0 を維持（縦線を上下いっぱいに引くため） */
   .sp-table td.meta-cell { padding: 0 !important; }
 
   .sp-table .header-container .sort-link { justify-content: center !important; }
 
-  .sp-table th:nth-child(1) { width: 39.5%; }
+  /* SP版ヘッダー内の仕切り罫線 */
+  .sp-table .header-container > div:not(:last-child),
+  .sp-table .header-container > a:not(:last-child) {
+    border-bottom: 1px solid #bdbdbd;
+  }
+
+  .sp-table th:nth-child(1) { width: 39%; }
   .sp-table th:nth-child(2) { width: 14%; }
   .sp-table th:nth-child(3) { width: 13%; }
   .sp-table th:nth-child(4) { width: 7%; }
   .sp-table th:nth-child(5) { width: 7%; }
   .sp-table th:nth-child(6) { width: 7%; }
   .sp-table th:nth-child(7) { width: 6%; }
-  .sp-table th:nth-child(8) { width: 6.5%; }
+  .sp-table th:nth-child(8) { width: 7%; }
 
   .sp-table .score-cell { font-size: 12px !important; letter-spacing: -0.7px; }
-  .sp-table .sort-link { padding: 3px 2px; font-size: 11px; }
+
+  /* SP版ヘッダーの高さ圧縮（paddingとline-heightを詰める） */
+  .sp-table .sort-link { padding: 1px 2px !important; font-size: 11px; line-height: 1.15; }
+  .sp-no-label { padding: 1px 4px !important; line-height: 1.15; }
 }
 </style>
 """
