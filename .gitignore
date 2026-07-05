@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+
+.env
+*.csv
+*.sqlite
+*.db
+
+app_broken_date_link.py
+backup/
+data/
+screenshots/
+ocr_candidates/
+ocr_rejected/
