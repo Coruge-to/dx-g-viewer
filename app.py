@@ -417,13 +417,12 @@ def render_pc_table(df, sort_col, sort_dir, date, song, artist, mode, search):
         date_link = anchor(date_href, esc(d_val), cls="date-text")
         song_link = anchor(song_href, esc(s_val), cls="song-pc")
 
-        # 日付列と曲名/歌手名列は「左右揃え相当の padding」＝ pc-txt-cell クラスで左右padding を独立制御。
-        # 日付列は pc-txt-cell のみ → 中央揃え（.pc-table td.pc-txt-cell に text-align: center を明示）。
-        # 曲名/歌手名列は meta-cell-pc + pc-txt-cell → meta-cell-pc の text-align: left !important が勝って左寄せ維持。
+        # 日付列は他の数値列と同じ扱いで、素の <td>（padding = --pc-td-pad-num = 0px、中央揃え）。
+        # 曲名/歌手名列だけ meta-cell-pc + pc-txt-cell で左寄せ＋広めの padding を維持。
         row = (
             '<tr>'
             + '<td>' + str(i+1) + '</td>'
-            + '<td>' + date_link + '</td>'   # ← pc-txt-cell を外した
+            + '<td>' + date_link + '</td>'
             + '<td class="meta-cell-pc pc-txt-cell">' + song_link + ' <span class="artist-pc">/ ' + esc(a_val) + '</span></td>'
             + '<td class="score-cell-pc" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
             + td_num("base_score", fmt(r["base_score"], 3))
@@ -459,8 +458,16 @@ DXG_CSS = """
 /* ==============================================================
    ▼ 手動調整用 CSS 変数
    PC版のtd左右パディングをここで一括制御する。
-   --pc-td-pad-num : 中央揃え（num-slot 内包）用。0〜1pxが理想。広げるとスロットが崩れる。
-   --pc-td-pad-txt : 左右揃え相当（日付・曲名/歌手名）用。手作業で好みに調整する箇所。
+   --pc-td-pad-num : 中央揃え（num-slot 内包＋日付）用。0〜1pxが理想。広げるとスロットが崩れる。
+   --pc-td-pad-txt : 曲名/歌手名列用。viewport 幅に応じて可変にする。
+                     clamp(最小値, 動的値, 最大値):
+                       最小値 4.5px … viewport 1000px 相当（PC/SP境界）の基準
+                       動的値 calc(-19.5px + 2.4vw) … 1000px→4.5px、1440px→15.06px の線形補間
+                       最大値 15.06px … 1440px以上での上限
+                     ▼ 別の2点に変えたいときの公式：
+                       傾き(vw) = (P2 - P1) / (W2 - W1) × 100
+                       切片(px) = P1 - W1 × 傾き/100
+                       clamp(min, calc(切片px + 傾きvw), max) で表現。
    ============================================================== */
 :root {
   --pc-td-pad-num: 0px;
@@ -541,17 +548,34 @@ section.main > div.block-container,
   max-width: 1440px;
   margin: 0 auto 15px auto;
 }
-.nav-brand { font-size: 24px; font-weight: bold; color: #1666aa; }
+
+/* ⑥ nav内の全要素を同じ 40px の箱に統一して縦位置を完全に揃える。
+   .custom-nav 直下＋孫要素すべてに height: 40px と inline-flex/align-items:center を適用。
+   タブは padding 上下→height に変更、border-bottom は⑤で透明化済みなので削除（3pxぶんの高さ差を解消）。
+   検索ボックス(iframe 32px)は 40px 箱の中で center 揃え。 */
+.nav-brand {
+  font-size: 24px; font-weight: bold; color: #1666aa;
+  display: inline-flex; align-items: center;
+  height: 40px;
+}
 .nav-tabs { display: flex; align-items: center; }
 .nav-tabs a {
-  padding: 10px 20px; color: #555 !important; text-decoration: none !important;
-  font-weight: bold; border-bottom: 3px solid transparent; border-radius: 0 !important;
+  padding: 0 20px;
+  height: 40px;
+  display: inline-flex; align-items: center;
+  box-sizing: border-box;
+  color: #555 !important; text-decoration: none !important;
+  font-weight: bold; border-radius: 0 !important;
 }
 .nav-tabs a:hover { background: #f0f0f0; }
-/* ⑤ 選択されているタブの青下線を除去（文字色のみで選択状態を示す） */
-.nav-tabs a.active { border-bottom: 3px solid transparent; color: #1666aa !important; }
+/* ⑤ 選択されているタブは文字色のみで選択状態を示す（border-bottom は使わない） */
+.nav-tabs a.active { color: #1666aa !important; }
 
-.pc-search-form { margin-right: 20px; display: flex; align-items: center; }
+.pc-search-form {
+  margin-right: 20px;
+  height: 40px;
+  display: inline-flex; align-items: center;
+}
 
 .nav-sp-icons { display: none; font-size: 20px; color: #555; gap: 10px; align-items: center; }
 .icon-label { cursor: pointer; border: 1px solid #ddd; background: #f8f8f8; border-radius: 4px; user-select: none; }
@@ -572,9 +596,8 @@ section.main > div.block-container,
 
 .pc-table-wrapper { max-width: 1440px; margin: 0 auto; }
 .pc-table { width: 100%; table-layout: fixed; border: 2px solid #666; }
-/* PC版：中央揃え（num-slot 内包）は --pc-td-pad-num、
-   左右揃え相当（テキスト・.pc-txt-cell）は --pc-td-pad-txt で別制御。
-   ここは変数を書き換えるだけで両者を独立に調整できる。 */
+/* PC版：全 td の基本は中央揃え＋--pc-td-pad-num（0px）で最小マージン。
+   日付列もこれに乗るので、他の数値列と完全に同じ扱いになる。 */
 .pc-table td {
   text-align: center;
   font-size: 14px !important;
@@ -584,12 +607,10 @@ section.main > div.block-container,
   border-bottom: 2px solid #666 !important;
   padding: 4px var(--pc-td-pad-num) !important;
 }
-/* ▼ 日付列・曲名/歌手名列の左右 padding だけ広めに確保。
-   text-align: center を明示。曲名/歌手名側は .meta-cell-pc の text-align: left !important が
-   より強い specificity で勝つため、そちらは左寄せのまま維持される。
-   → 結果として「日付＝中央揃え、曲名/歌手名＝左寄せ」の意図が両立する。 */
+/* ▼ 曲名/歌手名列のみ左寄せ＋広めのpadding（viewportで可変）。
+   .meta-cell-pc の text-align: left !important が specificity で勝つので、
+   左寄せ意図はそのまま維持される。 */
 .pc-table td.pc-txt-cell {
-  text-align: center;
   padding: 4px var(--pc-td-pad-txt) !important;
 }
 .pc-table thead th { box-shadow: 0 -2px 0 #666, 0 2px 0 #666 !important; }
@@ -748,7 +769,7 @@ section.main > div.block-container,
 
   /* ▼▼▼ SP版・中央揃えの左右マージン設定はここ ▼▼▼
      以下の "3px 0px" の第2引数（0px）が SP版数値セルの左右 padding。
-     現在 iPhone SE (375px) の 4ch 列がギリギリ収まっているため、
+     現在 iPhone SE (375px) の 3.4ch 列がギリギリ収まっているため、
      ここを増やす（1px以上）と 3.4ch 列がはみ出す危険大。触るなら 0.5px 単位で慎重に。 */
   .sp-table th, .sp-table td { padding: 3px 0px; white-space: nowrap; overflow: hidden; }
   /* 日付/曲名/歌手名列は独自レイアウト（flex）なので td 自体の padding は 0 */
