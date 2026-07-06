@@ -39,11 +39,45 @@ HEADER_CONFIG_PC = [
     ("vibrato_count", "ビ回"), ("vibrato_type_code", "ビタ")
 ]
 
-PC_NUM_RIGHT_KEYS = {
-    "base_score", "bonus_score", "chart_total", "pitch", "stability",
-    "expressive", "rhythm", "vibrato_longtone", "emphasis",
-    "shakuri_count", "kobushi_count", "fall_count",
-    "longtone_skill", "vibrato_skill", "vibrato_seconds", "vibrato_count",
+# 数値セルのスロット幅（ch単位）。td は中央揃え、内部 span.num-slot に幅を持たせて右詰め。
+# これにより「最大桁が来た時は見た目中央、桁が少ない時は右詰め」となり
+# 列内の桁位置（特に小数点位置）が横幅変化にかかわらず安定する。
+#
+# ★ 小数点や '-' は数字より狭いので、その桁だけ 0.4ch 引く（例: 99.9 は 3+0.4=3.4ch, 100.000 は 6+0.4=6.4ch）。
+#    これで無駄な余白なくピッタリ収まる。
+
+# PC版のスロット幅
+PC_NUM_SLOT_WIDTH = {
+    "base_score": 6.4,      # 100.000
+    "bonus_score": 4.4,     # 3.212
+    "chart_total": 3,       # 500
+    "pitch": 3, "stability": 3, "expressive": 3,
+    "rhythm": 3, "vibrato_longtone": 3, "emphasis": 3,
+    "shakuri_count": 2, "kobushi_count": 2, "fall_count": 2,
+    "longtone_skill": 2, "vibrato_skill": 2,
+    "vibrato_seconds": 3.4, # 99.9
+    "vibrato_count": 3,     # 999
+}
+
+# SP版のスロット幅（3行構成のため、縦に並ぶ項目は最長桁に合わせる。
+# ボタ・ビタも数値と同じ「列内の最長ch」でスロット化して右詰め）
+SP_NUM_SLOT_WIDTH = {
+    "base_score": 6.4,          # 素点 100.000
+    "bonus_score": 6.4,         # ボ点：素点と小数点位置を揃えるため6.4ch
+    "bonus_type_short": 6.4,    # ボタ：素点/ボ点と縦に並ぶ列なので6.4ch右詰め
+    "chart_total": 3,           # チ計 500
+    "vibrato_longtone": 3,      # VL
+    "rhythm": 3,                # リ
+    "pitch": 3, "stability": 3, "expressive": 3,
+    "emphasis": 3,              # 抑
+    "kobushi_count": 3,         # こ（抑と縦に並ぶので3ch）
+    "longtone_skill": 3,        # ロ（抑と縦に並ぶので3ch）
+    "shakuri_count": 2,         # し
+    "fall_count": 2,            # フ
+    "vibrato_skill": 2,         # ビ
+    "vibrato_seconds": 3.4,     # ビ秒 99.9（小数点は数字より狭いので実質3.4ch）
+    "vibrato_count": 3.4,       # ビ回（ビ秒と縦揃え）
+    "vibrato_type_label": 3.4,  # ビタ（ビ秒/ビ回と縦揃え）
 }
 
 
@@ -68,6 +102,15 @@ def tag_close(name):
 
 def anchor(href, text, cls=None, target="_self"):
     return tag_open("a", href=href, target=target, cls=cls) + text + tag_close("a")
+
+
+def num_slot(value, width):
+    """値を最大桁ぶんの ch 幅スロットで囲み、右詰め表示する。
+    親 <td> は中央揃えのまま、スロット内で右詰めすることで
+    「最大桁時は見た目中央」「少ない桁時は右詰め」となり列内の桁位置が揃う。
+    注: 狭い列でスロットがはみ出ないよう、親 <td> の左右 padding は最小限にすること。
+    width は int でも float でも可（str() で "3.4ch" のように出力）。"""
+    return '<span class="num-slot" style="width:' + str(width) + 'ch">' + str(value) + '</span>'
 
 
 def get_latest_csv():
@@ -196,14 +239,20 @@ def make_sort_href(col_key, current_sort_col, current_sort_dir, current_date, cu
     return "?" + urlencode(params)
 
 def get_search_iframe_srcdoc(keyword):
+    # 検索絵文字を廃止し、背景にSVGアイコンを仕込む
     srcdoc = """
     <!DOCTYPE html>
     <html><head><style>
       body { margin: 0; padding: 0; background: transparent; font-family: sans-serif; }
       form { margin: 0; display: flex; }
       input {
-        width: 100%; height: 32px; padding: 6px 12px; border: 1px solid #ccc;
+        width: 100%; height: 32px; 
+        padding: 6px 12px 6px 30px; /* 左側にアイコン用の余白を確保 */
+        border: 1px solid #ccc;
         border-radius: 4px; color: #333; font-size: 14px; outline: none; box-sizing: border-box;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="%23888888" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>');
+        background-repeat: no-repeat;
+        background-position: 8px center;
       }
       input:focus { border-color: #1666aa; box-shadow: 0 0 4px rgba(22,102,170,0.3); }
       input::placeholder { color: #aaa; }
@@ -224,7 +273,7 @@ def get_search_iframe_srcdoc(keyword):
     </head>
     <body>
       <form onsubmit='submitSearch(event, this)'>
-        <input type='text' name='search' value='__KW__' placeholder='\U0001F50D 曲名 or 歌手名'>
+        <input type='text' name='search' value='__KW__' placeholder='曲名 or 歌手名'>
       </form>
     </body></html>
     """
@@ -286,12 +335,12 @@ def render_sp_table(df, sort_col, sort_dir, date, song, artist, mode, search):
             +   '</div>'
             + '</td>'
             + '<td rowspan="3" class="score-cell" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
-            + '<td>' + fmt(r["base_score"], 3) + '</td>'
-            + '<td>' + fmt(r["chart_total"]) + '</td>'
-            + '<td>' + fmt(r["pitch"]) + '</td>'
-            + '<td>' + fmt(r["emphasis"]) + '</td>'
-            + '<td>' + fmt(r["shakuri_count"]) + '</td>'
-            + '<td>' + fmt(r["vibrato_seconds"], 1) + '</td>'
+            + '<td>' + num_slot(fmt(r["base_score"], 3), SP_NUM_SLOT_WIDTH["base_score"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["chart_total"]), SP_NUM_SLOT_WIDTH["chart_total"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["pitch"]), SP_NUM_SLOT_WIDTH["pitch"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["emphasis"]), SP_NUM_SLOT_WIDTH["emphasis"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["shakuri_count"]), SP_NUM_SLOT_WIDTH["shakuri_count"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["vibrato_seconds"], 1), SP_NUM_SLOT_WIDTH["vibrato_seconds"]) + '</td>'
             + '</tr>'
         )
         row2 = (
@@ -301,12 +350,12 @@ def render_sp_table(df, sort_col, sort_dir, date, song, artist, mode, search):
             +     '<div class="sp-song-val">' + song_link + '</div>'
             +   '</div>'
             + '</td>'
-            + '<td>' + fmt(r["bonus_score"], 3) + '</td>'
-            + '<td>' + fmt(r["vibrato_longtone"]) + '</td>'
-            + '<td>' + fmt(r["stability"]) + '</td>'
-            + '<td>' + fmt(r["kobushi_count"]) + '</td>'
-            + '<td>' + fmt(r["fall_count"]) + '</td>'
-            + '<td>' + fmt(r["vibrato_count"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["bonus_score"], 3), SP_NUM_SLOT_WIDTH["bonus_score"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["vibrato_longtone"]), SP_NUM_SLOT_WIDTH["vibrato_longtone"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["stability"]), SP_NUM_SLOT_WIDTH["stability"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["kobushi_count"]), SP_NUM_SLOT_WIDTH["kobushi_count"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["fall_count"]), SP_NUM_SLOT_WIDTH["fall_count"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["vibrato_count"]), SP_NUM_SLOT_WIDTH["vibrato_count"]) + '</td>'
             + '</tr>'
         )
         row3 = (
@@ -316,12 +365,12 @@ def render_sp_table(df, sort_col, sort_dir, date, song, artist, mode, search):
             +     '<div class="sp-artist-val clip artist">' + esc(a_val) + '</div>'
             +   '</div>'
             + '</td>'
-            + '<td>' + esc(r["bonus_type_short"]) + '</td>'
-            + '<td>' + fmt(r["rhythm"]) + '</td>'
-            + '<td>' + fmt(r["expressive"]) + '</td>'
-            + '<td>' + fmt(r["longtone_skill"]) + '</td>'
-            + '<td>' + fmt(r["vibrato_skill"]) + '</td>'
-            + '<td>' + esc(r["vibrato_type_label"]) + '</td>'
+            + '<td>' + num_slot(esc(r["bonus_type_short"]), SP_NUM_SLOT_WIDTH["bonus_type_short"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["rhythm"]), SP_NUM_SLOT_WIDTH["rhythm"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["expressive"]), SP_NUM_SLOT_WIDTH["expressive"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["longtone_skill"]), SP_NUM_SLOT_WIDTH["longtone_skill"]) + '</td>'
+            + '<td>' + num_slot(fmt(r["vibrato_skill"]), SP_NUM_SLOT_WIDTH["vibrato_skill"]) + '</td>'
+            + '<td>' + num_slot(esc(r["vibrato_type_label"]), SP_NUM_SLOT_WIDTH["vibrato_type_label"]) + '</td>'
             + '</tr>'
         )
         parts.append(row1 + row2 + row3)
@@ -351,8 +400,10 @@ def render_pc_table(df, sort_col, sort_dir, date, song, artist, mode, search):
     parts.append('<table class="dxg-table pc-table"><thead><tr>' + "".join(header_cells) + '</tr></thead><tbody>')
 
     def td_num(key, value):
-        cls_attr = ' class="num-right"' if key in PC_NUM_RIGHT_KEYS else ''
-        return '<td' + cls_attr + '>' + str(value) + '</td>'
+        w = PC_NUM_SLOT_WIDTH.get(key)
+        if w is None:
+            return '<td>' + str(value) + '</td>'
+        return '<td>' + num_slot(value, w) + '</td>'
 
     for i, r in df.reset_index(drop=True).iterrows():
         bg = score_color(r["total_score"], r["bonus_score"])
@@ -366,11 +417,14 @@ def render_pc_table(df, sort_col, sort_dir, date, song, artist, mode, search):
         date_link = anchor(date_href, esc(d_val), cls="date-text")
         song_link = anchor(song_href, esc(s_val), cls="song-pc")
 
+        # 日付列と曲名/歌手名列は「左右揃え相当の padding」＝ pc-txt-cell クラスで左右padding を独立制御。
+        # 日付列は pc-txt-cell のみ → 中央揃え（.pc-table td.pc-txt-cell に text-align: center を明示）。
+        # 曲名/歌手名列は meta-cell-pc + pc-txt-cell → meta-cell-pc の text-align: left !important が勝って左寄せ維持。
         row = (
             '<tr>'
             + '<td>' + str(i+1) + '</td>'
-            + '<td>' + date_link + '</td>'
-            + '<td class="meta-cell-pc">' + song_link + ' <span class="artist-pc">/ ' + esc(a_val) + '</span></td>'
+            + '<td>' + date_link + '</td>'   # ← pc-txt-cell を外した
+            + '<td class="meta-cell-pc pc-txt-cell">' + song_link + ' <span class="artist-pc">/ ' + esc(a_val) + '</span></td>'
             + '<td class="score-cell-pc" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
             + td_num("base_score", fmt(r["base_score"], 3))
             + td_num("bonus_score", fmt(r["bonus_score"], 3))
@@ -402,6 +456,22 @@ st.set_page_config(page_title="DX-G Viewer", layout="wide")
 
 DXG_CSS = """
 <style>
+/* ==============================================================
+   ▼ 手動調整用 CSS 変数
+   PC版のtd左右パディングをここで一括制御する。
+   --pc-td-pad-num : 中央揃え（num-slot 内包）用。0〜1pxが理想。広げるとスロットが崩れる。
+   --pc-td-pad-txt : 左右揃え相当（日付・曲名/歌手名）用。手作業で好みに調整する箇所。
+   ============================================================== */
+:root {
+  --pc-td-pad-num: 0px;
+  --pc-td-pad-txt: clamp(4.5px, calc(-19.5px + 2.4vw), 15.06px);
+}
+
+/* Streamlitヘッダーを完全に消去してtop: 0の領空権を取り戻す */
+header[data-testid="stHeader"] {
+  display: none !important;
+}
+
 /* Streamlit の block-container 幅段階変化を殺す（864px対策） */
 [data-testid="stMainBlockContainer"],
 section.main > div.block-container,
@@ -410,7 +480,7 @@ section.main > div.block-container,
   max-width: 100% !important;
   padding-left: 1rem !important;
   padding-right: 1rem !important;
-  padding-top: 1rem !important;
+  padding-top: 0 !important; /* 上の余白も0に */
 }
 
 .dxg-table {
@@ -426,22 +496,24 @@ section.main > div.block-container,
   white-space: nowrap;
 }
 
-/* 二段sticky */
+/* 二段stickyの完全制御 */
 .custom-nav {
   position: sticky;
   top: 0;
   z-index: 300;
   background: #ffffff;
+  height: 55px;
+  box-sizing: border-box;
 }
 .sp-search-bar, .sp-dropdown {
   position: sticky;
-  top: 56px;
+  top: 55px;
   z-index: 250;
   background: #f8f8f8;
 }
 .dxg-table thead th {
   position: sticky;
-  top: 56px;
+  top: 55px; /* custom-navの下にピタッと張り付く */
   z-index: 100;
   background-color: #f8f8f8 !important;
   font-weight: bold;
@@ -476,12 +548,13 @@ section.main > div.block-container,
   font-weight: bold; border-bottom: 3px solid transparent; border-radius: 0 !important;
 }
 .nav-tabs a:hover { background: #f0f0f0; }
-.nav-tabs a.active { border-bottom: 3px solid #1666aa; color: #1666aa !important; }
+/* ⑤ 選択されているタブの青下線を除去（文字色のみで選択状態を示す） */
+.nav-tabs a.active { border-bottom: 3px solid transparent; color: #1666aa !important; }
 
 .pc-search-form { margin-right: 20px; display: flex; align-items: center; }
 
 .nav-sp-icons { display: none; font-size: 20px; color: #555; gap: 10px; align-items: center; }
-.icon-label { cursor: pointer; padding: 6px 10px; border: 1px solid #ddd; background: #f8f8f8; border-radius: 4px; user-select: none; }
+.icon-label { cursor: pointer; border: 1px solid #ddd; background: #f8f8f8; border-radius: 4px; user-select: none; }
 .icon-label:active { background: #eee; }
 .hidden-toggle { display: none; }
 
@@ -497,41 +570,49 @@ section.main > div.block-container,
   overflow: visible !important;
 }
 
-/* PC版：外枠および横線を太くする（スマホ版の 2px solid #666 と同様に） */
 .pc-table-wrapper { max-width: 1440px; margin: 0 auto; }
-.pc-table { 
-  width: 100%; 
-  table-layout: fixed; 
-  border: 2px solid #666; /* 外枠を太く */
+.pc-table { width: 100%; table-layout: fixed; border: 2px solid #666; }
+/* PC版：中央揃え（num-slot 内包）は --pc-td-pad-num、
+   左右揃え相当（テキスト・.pc-txt-cell）は --pc-td-pad-txt で別制御。
+   ここは変数を書き換えるだけで両者を独立に調整できる。 */
+.pc-table td {
+  text-align: center;
+  font-size: 14px !important;
+  overflow: hidden;
+  white-space: nowrap;
+  border-top: 2px solid #666 !important;
+  border-bottom: 2px solid #666 !important;
+  padding: 4px var(--pc-td-pad-num) !important;
 }
-.pc-table td { 
-  text-align: center; 
-  font-size: 14px !important; 
-  overflow: hidden; 
-  white-space: nowrap; 
-  border-top: 2px solid #666 !important;    /* 各行の横線を太く */
-  border-bottom: 2px solid #666 !important; /* 各行の横線を太く */
+/* ▼ 日付列・曲名/歌手名列の左右 padding だけ広めに確保。
+   text-align: center を明示。曲名/歌手名側は .meta-cell-pc の text-align: left !important が
+   より強い specificity で勝つため、そちらは左寄せのまま維持される。
+   → 結果として「日付＝中央揃え、曲名/歌手名＝左寄せ」の意図が両立する。 */
+.pc-table td.pc-txt-cell {
+  text-align: center;
+  padding: 4px var(--pc-td-pad-txt) !important;
 }
-.pc-table thead th {
-  /* PC版ヘッダーの上下境界も太くする */
-  box-shadow: 0 -2px 0 #666, 0 2px 0 #666 !important;
-}
+.pc-table thead th { box-shadow: 0 -2px 0 #666, 0 2px 0 #666 !important; }
 .pc-table a, .pc-table span { font-size: 14px !important; }
 
-/* PC版：指定16項目の数値セルだけ右揃え */
-.pc-table td.num-right {
-  text-align: right !important;
-  padding-right: 10px !important;
+/* 数値スロット：td は中央揃え、内部 span を最大桁幅の ch で確保し右詰め。
+   → 最大桁時は「見た目中央」、桁が少ない時は「右詰め」で列内の桁位置が揃う。
+   横幅が変化しても数字の桁位置（特に小数点位置）が安定する。 */
+.num-slot {
+  display: inline-block;
+  text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: pre;
+  padding: 0;
 }
 
-.pc-table th:nth-child(1) { width: 3.5%; }
+.pc-table th:nth-child(1) { width: 5.5%; }
 .pc-table th:nth-child(2) { width: 7.0%; }
 .pc-table th:nth-child(3) { width: 23.0%; }
-.pc-table th:nth-child(4) { width: 7.0%; }
-.pc-table th:nth-child(5) { width: 7.0%; }
-.pc-table th:nth-child(6) { width: 5.0%; }
-.pc-table th:nth-child(7) { width: 4.0%; }
+.pc-table th:nth-child(4) { width: 6.5%; }
+.pc-table th:nth-child(5) { width: 6.5%; }
+.pc-table th:nth-child(6) { width: 4.5%; }
+.pc-table th:nth-child(7) { width: 3.5%; }
 .pc-table th:nth-child(8) { width: 3.5%; }
 .pc-table th:nth-child(9), .pc-table th:nth-child(10), .pc-table th:nth-child(11),
 .pc-table th:nth-child(12), .pc-table th:nth-child(13), .pc-table th:nth-child(14) { width: 3.5%; }
@@ -547,6 +628,13 @@ section.main > div.block-container,
 
 .header-container { display: flex; flex-direction: column; height: 100%; }
 .right-align .sort-link { justify-content: flex-end; }
+
+/* SP版：.dxg-table td の text-align:right を上書きして中央配置に。
+   これで内部の .num-slot（inline-block, width:Xch, text-align:right）が
+   td 内で中央寄せされ、値がスロット内で右詰めされる。
+   → 最大桁時は視覚中央、少桁時は右詰めで列内の桁位置が揃う。 */
+.sp-table td { text-align: center; }
+
 .sp-table .score-cell {
   text-align: center;
   font-weight: 500;
@@ -639,11 +727,11 @@ section.main > div.block-container,
   align-items: center;
 }
 
-@media screen and (min-width: 900px) {
+@media screen and (min-width: 1000px) {
   .view-sp, .sp-search-bar, .sp-dropdown, .hidden-toggle { display: none !important; }
   .view-pc { display: block; width: 100%; }
 }
-@media screen and (max-width: 899px) {
+@media screen and (max-width: 999px) {
   .view-pc { display: none !important; }
   .view-sp { display: block; width: 100%; }
 
@@ -657,9 +745,26 @@ section.main > div.block-container,
     font-size: 11px !important; 
     border: 2px solid #666; 
   }
-  .sp-table th, .sp-table td { padding: 3px 1px; white-space: nowrap; overflow: hidden; }
-  /* meta-cell は padding: 0 を維持（縦線を上下いっぱいに引くため） */
+
+  /* ▼▼▼ SP版・中央揃えの左右マージン設定はここ ▼▼▼
+     以下の "3px 0px" の第2引数（0px）が SP版数値セルの左右 padding。
+     現在 iPhone SE (375px) の 4ch 列がギリギリ収まっているため、
+     ここを増やす（1px以上）と 3.4ch 列がはみ出す危険大。触るなら 0.5px 単位で慎重に。 */
+  .sp-table th, .sp-table td { padding: 3px 0px; white-space: nowrap; overflow: hidden; }
+  /* 日付/曲名/歌手名列は独自レイアウト（flex）なので td 自体の padding は 0 */
   .sp-table td.meta-cell { padding: 0 !important; }
+  /* num-slot 内側の padding。これも触らない方が安全（0固定） */
+  .sp-table .num-slot { padding: 0; }
+  /* ▲▲▲ SP版・中央揃えの左右マージン設定はここまで ▲▲▲ */
+
+  /* ▼ SP版 num-slot の文字幅圧縮（iPhone SE 対策）
+     ch は「フォントの '0' 幅」で定義されるが、Arial/Yu Gothic のプロポーショナル系では
+     '0' 以外の数字がわずかに広い＋カーニングも入るため、境界セルで overflow することがある。
+     → 数値表示だけを Arial 系に固定し、letter-spacing を負に振って累積幅を確実に ch 以内に収める。 */
+  .sp-table .num-slot {
+    font-family: Arial, "Helvetica Neue", sans-serif;
+    letter-spacing: -0.3px;
+  }
 
   .sp-table .header-container .sort-link { justify-content: center !important; }
 
@@ -680,7 +785,7 @@ section.main > div.block-container,
 
   .sp-table .score-cell { font-size: 12px !important; letter-spacing: -0.7px; }
 
-  /* SP版ヘッダーの高さ圧縮（paddingとline-heightを詰める） */
+  /* SP版ヘッダーの高さ圧縮 */
   .sp-table .sort-link { padding: 1px 2px !important; font-size: 11px; line-height: 1.15; }
   .sp-no-label { padding: 1px 4px !important; line-height: 1.15; }
 }
@@ -730,6 +835,10 @@ sp_tab_hist = anchor("?mode=history", "歌唱履歴", cls=active_hist)
 sp_tab_best = anchor("?mode=best", "曲別最高点", cls=active_best)
 sp_tab_other = anchor("#", "その他集計")
 
+# スマホ版アイコン（SVG化）
+search_svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>'
+menu_svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>'
+
 nav_html = (
     '<div class="custom-nav">'
     + '<div class="nav-brand">精密集計DX-G</div>'
@@ -740,8 +849,8 @@ nav_html = (
     +   nav_tab_hist + nav_tab_best + nav_tab_other
     + '</div>'
     + '<div class="nav-sp-icons">'
-    +   '<label for="search-toggle" class="icon-label">\U0001F50D</label>'
-    +   '<label for="menu-toggle" class="icon-label">\u2630</label>'
+    +   '<label for="search-toggle" class="icon-label" style="display:flex; align-items:center; padding: 6px 8px;">' + search_svg + '</label>'
+    +   '<label for="menu-toggle" class="icon-label" style="display:flex; align-items:center; padding: 6px 8px;">' + menu_svg + '</label>'
     + '</div>'
     + '</div>'
     + '<input type="checkbox" id="search-toggle" class="hidden-toggle" ' + search_checked + '>'
