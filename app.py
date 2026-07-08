@@ -617,6 +617,20 @@ section.main > div.block-container,
   flex-direction: column;
 }
 
+/* 検索結果 0 件時の空状態メッセージ。表1/表2 は非表示なので、
+   スペースの中央あたりにテキストだけ表示する。 */
+.empty-state {
+  max-width: 1440px;
+  /* 上下のマージンを 0 に、余白は padding のみで確保。
+     結果としてビューの最上部（灰色線の直下）に貼り付く形になる。 */
+  margin: 0 auto;
+  padding: 0px 0px;
+  text-align: center;
+  color: #888;
+  font-size: 20px;
+  font-family: Arial, "Source Sans", sans-serif;
+}
+
 /* ========================================
    案B: PC版 header table (テーブル全体を sticky) 
    ======================================== */
@@ -1005,18 +1019,28 @@ if selected_date: active_filters.append("日付: " + str(selected_date))
 if selected_song and selected_artist: active_filters.append("楽曲: " + str(selected_song))
 if keyword: active_filters.append("検索: " + str(keyword))
 
-# 案B: header/body の 2テーブル構造で HTML を組み立てる
-html_sp_header = render_sp_header(sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
-html_sp_body = render_sp_body(view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
-html_pc_header = render_pc_header(sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
-html_pc_body = render_pc_body(view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
+# 検索結果が0件のときは表を非表示にし、「該当する曲はありません」を表示。
+# それ以外は案B: header/body の 2テーブル構造で HTML を組み立てる。
+if view.empty:
+    empty_msg = '<div class="empty-state">該当する曲はありません</div>'
+    html_string = (
+        '<div class="dxg-scroll-wrapper">'
+        + '<div class="view-pc">' + empty_msg + '</div>'
+        + '<div class="view-sp">' + empty_msg + '</div>'
+        + '</div>'
+    )
+else:
+    html_sp_header = render_sp_header(sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
+    html_sp_body = render_sp_body(view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
+    html_pc_header = render_pc_header(sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
+    html_pc_body = render_pc_body(view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
 
-html_string = (
-    '<div class="dxg-scroll-wrapper">'
-    + '<div class="view-pc"><div class="pc-table-wrapper">' + html_pc_header + html_pc_body + '</div></div>'
-    + '<div class="view-sp">' + html_sp_header + html_sp_body + '</div>'
-    + '</div>'
-)
+    html_string = (
+        '<div class="dxg-scroll-wrapper">'
+        + '<div class="view-pc"><div class="pc-table-wrapper">' + html_pc_header + html_pc_body + '</div></div>'
+        + '<div class="view-sp">' + html_sp_header + html_sp_body + '</div>'
+        + '</div>'
+    )
 
 combined = DXG_CSS + nav_html + html_string
 clean_html = "\n".join([line.strip() for line in combined.split("\n")])
