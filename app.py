@@ -335,66 +335,73 @@ def render_sp_header(sort_col, sort_dir, date, song, artist, mode, search):
 def render_sp_body(df, sort_col, sort_dir, date, song, artist, mode, search):
     parts = ['<table class="dxg-table sp-body-table">' + build_colgroup(SP_COL_WIDTHS) + '<tbody>']
 
-    for i, r in df.reset_index(drop=True).iterrows():
-        bg = score_color(r["total_score"], r["bonus_score"])
-        d_val = "" if pd.isna(r["play_date"]) else str(r["play_date"])
-        s_val = str(r["song_name"]) if not pd.isna(r["song_name"]) else ""
-        a_val = str(r["artist_name"]) if not pd.isna(r["artist_name"]) else ""
-
-        date_href = "?" + urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if d_val else "#"
-        song_href = "?" + urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if s_val else "#"
-
-        date_link = anchor(date_href, esc(d_val), cls="date-text sp-date-val")
-        song_link = anchor(song_href, esc(s_val), cls="clip song")
-
-        row1 = (
-            '<tr class="record-top">'
-            + '<td class="meta-cell">'
-            +   '<div class="sp-nodate-row">'
-            +     '<span class="sp-no-num">' + str(i+1) + '</span>'
-            +     date_link
-            +   '</div>'
-            + '</td>'
-            + '<td rowspan="3" class="score-cell" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
-            + '<td>' + num_slot(fmt(r["base_score"], 3), SP_NUM_SLOT_WIDTH["base_score"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["chart_total"]), SP_NUM_SLOT_WIDTH["chart_total"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["pitch"]), SP_NUM_SLOT_WIDTH["pitch"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["emphasis"]), SP_NUM_SLOT_WIDTH["emphasis"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["shakuri_count"]), SP_NUM_SLOT_WIDTH["shakuri_count"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["vibrato_seconds"], 1), SP_NUM_SLOT_WIDTH["vibrato_seconds"]) + '</td>'
-            + '</tr>'
+    if df.empty:
+        colspan = len(SP_COL_WIDTHS)
+        parts.append(
+            '<tr class="empty-row"><td colspan="' + str(colspan)
+            + '" class="empty-cell">該当する曲はありません</td></tr>'
         )
-        row2 = (
-            '<tr>'
-            + '<td class="meta-cell">'
-            +   '<div class="sp-nodate-row">'
-            +     '<div class="sp-song-val">' + song_link + '</div>'
-            +   '</div>'
-            + '</td>'
-            + '<td>' + num_slot(fmt(r["bonus_score"], 3), SP_NUM_SLOT_WIDTH["bonus_score"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["vibrato_longtone"]), SP_NUM_SLOT_WIDTH["vibrato_longtone"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["stability"]), SP_NUM_SLOT_WIDTH["stability"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["kobushi_count"]), SP_NUM_SLOT_WIDTH["kobushi_count"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["fall_count"]), SP_NUM_SLOT_WIDTH["fall_count"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["vibrato_count"]), SP_NUM_SLOT_WIDTH["vibrato_count"]) + '</td>'
-            + '</tr>'
-        )
-        row3 = (
-            '<tr class="record-bottom">'
-            + '<td class="meta-cell">'
-            +   '<div class="sp-nodate-row">'
-            +     '<div class="sp-artist-val clip artist">' + esc(a_val) + '</div>'
-            +   '</div>'
-            + '</td>'
-            + '<td>' + num_slot(esc(r["bonus_type_short"]), SP_NUM_SLOT_WIDTH["bonus_type_short"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["rhythm"]), SP_NUM_SLOT_WIDTH["rhythm"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["expressive"]), SP_NUM_SLOT_WIDTH["expressive"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["longtone_skill"]), SP_NUM_SLOT_WIDTH["longtone_skill"]) + '</td>'
-            + '<td>' + num_slot(fmt(r["vibrato_skill"]), SP_NUM_SLOT_WIDTH["vibrato_skill"]) + '</td>'
-            + '<td>' + num_slot(esc(r["vibrato_type_label"]), SP_NUM_SLOT_WIDTH["vibrato_type_label"]) + '</td>'
-            + '</tr>'
-        )
-        parts.append(row1 + row2 + row3)
+    else:
+        for i, r in df.reset_index(drop=True).iterrows():
+            bg = score_color(r["total_score"], r["bonus_score"])
+            d_val = "" if pd.isna(r["play_date"]) else str(r["play_date"])
+            s_val = str(r["song_name"]) if not pd.isna(r["song_name"]) else ""
+            a_val = str(r["artist_name"]) if not pd.isna(r["artist_name"]) else ""
+
+            date_href = "?" + urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if d_val else "#"
+            song_href = "?" + urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if s_val else "#"
+
+            date_link = anchor(date_href, esc(d_val), cls="date-text sp-date-val")
+            song_link = anchor(song_href, esc(s_val), cls="clip song")
+
+            row1 = (
+                '<tr class="record-top">'
+                + '<td class="meta-cell">'
+                +   '<div class="sp-nodate-row">'
+                +     '<span class="sp-no-num">' + str(i+1) + '</span>'
+                +     date_link
+                +   '</div>'
+                + '</td>'
+                + '<td rowspan="3" class="score-cell" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
+                + '<td>' + num_slot(fmt(r["base_score"], 3), SP_NUM_SLOT_WIDTH["base_score"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["chart_total"]), SP_NUM_SLOT_WIDTH["chart_total"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["pitch"]), SP_NUM_SLOT_WIDTH["pitch"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["emphasis"]), SP_NUM_SLOT_WIDTH["emphasis"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["shakuri_count"]), SP_NUM_SLOT_WIDTH["shakuri_count"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["vibrato_seconds"], 1), SP_NUM_SLOT_WIDTH["vibrato_seconds"]) + '</td>'
+                + '</tr>'
+            )
+            row2 = (
+                '<tr>'
+                + '<td class="meta-cell">'
+                +   '<div class="sp-nodate-row">'
+                +     '<div class="sp-song-val">' + song_link + '</div>'
+                +   '</div>'
+                + '</td>'
+                + '<td>' + num_slot(fmt(r["bonus_score"], 3), SP_NUM_SLOT_WIDTH["bonus_score"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["vibrato_longtone"]), SP_NUM_SLOT_WIDTH["vibrato_longtone"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["stability"]), SP_NUM_SLOT_WIDTH["stability"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["kobushi_count"]), SP_NUM_SLOT_WIDTH["kobushi_count"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["fall_count"]), SP_NUM_SLOT_WIDTH["fall_count"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["vibrato_count"]), SP_NUM_SLOT_WIDTH["vibrato_count"]) + '</td>'
+                + '</tr>'
+            )
+            row3 = (
+                '<tr class="record-bottom">'
+                + '<td class="meta-cell">'
+                +   '<div class="sp-nodate-row">'
+                +     '<div class="sp-artist-val clip artist">' + esc(a_val) + '</div>'
+                +   '</div>'
+                + '</td>'
+                + '<td>' + num_slot(esc(r["bonus_type_short"]), SP_NUM_SLOT_WIDTH["bonus_type_short"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["rhythm"]), SP_NUM_SLOT_WIDTH["rhythm"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["expressive"]), SP_NUM_SLOT_WIDTH["expressive"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["longtone_skill"]), SP_NUM_SLOT_WIDTH["longtone_skill"]) + '</td>'
+                + '<td>' + num_slot(fmt(r["vibrato_skill"]), SP_NUM_SLOT_WIDTH["vibrato_skill"]) + '</td>'
+                + '<td>' + num_slot(esc(r["vibrato_type_label"]), SP_NUM_SLOT_WIDTH["vibrato_type_label"]) + '</td>'
+                + '</tr>'
+            )
+            parts.append(row1 + row2 + row3)
 
     parts.append("</tbody></table>")
     return "".join(parts)
@@ -436,45 +443,52 @@ def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search):
             return '<td>' + str(value) + '</td>'
         return '<td>' + num_slot(value, w) + '</td>'
 
-    for i, r in df.reset_index(drop=True).iterrows():
-        bg = score_color(r["total_score"], r["bonus_score"])
-        d_val = "" if pd.isna(r["play_date"]) else str(r["play_date"])
-        s_val = str(r["song_name"]) if not pd.isna(r["song_name"]) else ""
-        a_val = str(r["artist_name"]) if not pd.isna(r["artist_name"]) else ""
-
-        date_href = "?" + urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if d_val else "#"
-        song_href = "?" + urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if s_val else "#"
-
-        date_link = anchor(date_href, esc(d_val), cls="date-text")
-        song_link = anchor(song_href, esc(s_val), cls="song-pc")
-
-        row = (
-            '<tr>'
-            + '<td>' + str(i+1) + '</td>'
-            + '<td>' + date_link + '</td>'
-            + '<td class="meta-cell-pc pc-txt-cell">' + song_link + ' <span class="artist-pc">/ ' + esc(a_val) + '</span></td>'
-            + '<td class="score-cell-pc" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
-            + td_num("base_score", fmt(r["base_score"], 3))
-            + td_num("bonus_score", fmt(r["bonus_score"], 3))
-            + '<td>' + esc(r["bonus_type_short"]) + '</td>'
-            + td_num("chart_total", fmt(r["chart_total"]))
-            + td_num("pitch", fmt(r["pitch"]))
-            + td_num("stability", fmt(r["stability"]))
-            + td_num("expressive", fmt(r["expressive"]))
-            + td_num("rhythm", fmt(r["rhythm"]))
-            + td_num("vibrato_longtone", fmt(r["vibrato_longtone"]))
-            + td_num("emphasis", fmt(r["emphasis"]))
-            + td_num("shakuri_count", fmt(r["shakuri_count"]))
-            + td_num("kobushi_count", fmt(r["kobushi_count"]))
-            + td_num("fall_count", fmt(r["fall_count"]))
-            + td_num("longtone_skill", fmt(r["longtone_skill"]))
-            + td_num("vibrato_skill", fmt(r["vibrato_skill"]))
-            + td_num("vibrato_seconds", fmt(r["vibrato_seconds"], 1))
-            + td_num("vibrato_count", fmt(r["vibrato_count"]))
-            + '<td>' + esc(r["vibrato_type_label"]) + '</td>'
-            + '</tr>'
+    if df.empty:
+        colspan = len(PC_COL_WIDTHS)
+        parts.append(
+            '<tr class="empty-row"><td colspan="' + str(colspan)
+            + '" class="empty-cell">該当する曲はありません</td></tr>'
         )
-        parts.append(row)
+    else:
+        for i, r in df.reset_index(drop=True).iterrows():
+            bg = score_color(r["total_score"], r["bonus_score"])
+            d_val = "" if pd.isna(r["play_date"]) else str(r["play_date"])
+            s_val = str(r["song_name"]) if not pd.isna(r["song_name"]) else ""
+            a_val = str(r["artist_name"]) if not pd.isna(r["artist_name"]) else ""
+
+            date_href = "?" + urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if d_val else "#"
+            song_href = "?" + urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if s_val else "#"
+
+            date_link = anchor(date_href, esc(d_val), cls="date-text")
+            song_link = anchor(song_href, esc(s_val), cls="song-pc")
+
+            row = (
+                '<tr>'
+                + '<td>' + str(i+1) + '</td>'
+                + '<td>' + date_link + '</td>'
+                + '<td class="meta-cell-pc pc-txt-cell">' + song_link + ' <span class="artist-pc">/ ' + esc(a_val) + '</span></td>'
+                + '<td class="score-cell-pc" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
+                + td_num("base_score", fmt(r["base_score"], 3))
+                + td_num("bonus_score", fmt(r["bonus_score"], 3))
+                + '<td>' + esc(r["bonus_type_short"]) + '</td>'
+                + td_num("chart_total", fmt(r["chart_total"]))
+                + td_num("pitch", fmt(r["pitch"]))
+                + td_num("stability", fmt(r["stability"]))
+                + td_num("expressive", fmt(r["expressive"]))
+                + td_num("rhythm", fmt(r["rhythm"]))
+                + td_num("vibrato_longtone", fmt(r["vibrato_longtone"]))
+                + td_num("emphasis", fmt(r["emphasis"]))
+                + td_num("shakuri_count", fmt(r["shakuri_count"]))
+                + td_num("kobushi_count", fmt(r["kobushi_count"]))
+                + td_num("fall_count", fmt(r["fall_count"]))
+                + td_num("longtone_skill", fmt(r["longtone_skill"]))
+                + td_num("vibrato_skill", fmt(r["vibrato_skill"]))
+                + td_num("vibrato_seconds", fmt(r["vibrato_seconds"], 1))
+                + td_num("vibrato_count", fmt(r["vibrato_count"]))
+                + '<td>' + esc(r["vibrato_type_label"]) + '</td>'
+                + '</tr>'
+            )
+            parts.append(row)
 
     parts.append("</tbody></table>")
     return "".join(parts)
@@ -613,12 +627,16 @@ section.main > div.block-container,
   flex-direction: column;
 }
 
-/* Streamlit または markdown パーサが挿入する余計な margin を潰す */
+/* Streamlit または markdown パーサが挿入する余計な margin を潰す。
+   header table は margin 0、body table は margin-top: -1px で
+   1px の隙間を吸収して表2の上に見える灰色1px線を潰す。 */
 .pc-header-table,
-.pc-body-table,
-.sp-header-table,
-.sp-body-table {
+.sp-header-table {
   margin: 0 !important;
+}
+.pc-body-table,
+.sp-body-table {
+  margin: -1px 0 0 0 !important;
 }
 
 .pc-header-table {
@@ -686,8 +704,37 @@ section.main > div.block-container,
 .song-pc { color: #1670a8; text-decoration: underline; }
 .artist-pc { color: #666; }
 
-.header-container { display: flex; flex-direction: column; height: 100%; }
+.header-container {
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  height: 100%;
+}
+.header-container > * {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+}
+.sp-header-table .center-align .header-container > *,
+.pc-header-table .center-align .header-container > * {
+  grid-row: 1 / -1;
+}
 .right-align .sort-link { justify-content: flex-end; }
+
+/* ========================================
+   検索0件時の空状態メッセージ
+   header table の border-bottom (2px黒) を上罫線として利用し、
+   左右下は自身の border で 2px 黒外枠を完成させる。
+   ======================================== */
+.empty-cell {
+  text-align: center !important;
+  padding: 40px 10px !important;
+  color: #888 !important;
+  font-size: 15px !important;
+  border-left: 2px solid #666 !important;
+  border-right: 2px solid #666 !important;
+  border-bottom: 2px solid #666 !important;
+  border-top: 0 !important;
+}
 
 /* ========================================
    案B: SP版 header/body table
@@ -715,6 +762,7 @@ section.main > div.block-container,
   color: #222;
   padding: 0;
   border: 1px solid #bdbdbd;
+  height: 1px;
 }
 
 .sp-body-table td { text-align: center; }
@@ -826,6 +874,20 @@ section.main > div.block-container,
     letter-spacing: -0.3px;
   }
 
+  /* SP版 header-container を grid に切り替えて子要素を等分ストレッチ。
+     flex column + flex-grow は Safari の一部で main-axis 拡張が効かないことがあるため
+     grid が確実に動作する。
+     - 点数セル（子1個）: 1行が th 全高を占有 → sort-link 全体が背景色＋クリック可
+     - 3項目セル（素点/ボ点/ボタ 等）: 3行が th 全高を均等に 1/3 ずつ占有
+     min-height: 0 は grid item のデフォルト min-height: auto を上書きし、
+     子要素が想定以上に膨らむのを防ぐ。 */
+  .sp-header-table .header-container {
+    display: grid;
+    grid-auto-rows: 1fr;
+  }
+  .sp-header-table .header-container > * {
+    min-height: 0;
+  }
   .sp-header-table .header-container .sort-link { justify-content: center !important; }
 
   .sp-header-table .header-container > div:not(:last-child),
@@ -837,6 +899,12 @@ section.main > div.block-container,
 
   .sp-header-table .sort-link { padding: 1px 2px !important; font-size: 11px; line-height: 1.15; }
   .sp-no-label { padding: 1px 4px !important; line-height: 1.15; }
+
+  /* SP版の空状態メッセージ：フォントサイズと padding を SP 用に調整 */
+  .sp-body-table .empty-cell {
+    font-size: 12px !important;
+    padding: 30px 10px !important;
+  }
 }
 </style>
 """
