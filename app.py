@@ -351,8 +351,17 @@ def render_sp_body(df, sort_col, sort_dir, date, song, artist, mode, search):
             date_href = "?" + urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if d_val else "#"
             song_href = "?" + urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if s_val else "#"
 
-            date_link = anchor(date_href, esc(d_val), cls="date-text sp-date-val")
-            song_link = anchor(song_href, esc(s_val), cls="clip song")
+            # 絞り込み条件と一致する日付/曲名はリンク化しない
+            if date == d_val:
+                date_link = '<span class="date-plain sp-date-val">' + esc(d_val) + '</span>'
+            else:
+                date_link = anchor(date_href, esc(d_val), cls="date-text sp-date-val")
+
+            if song == s_val and artist == a_val:
+                song_link = '<span class="song-plain clip song-nolink">' + esc(s_val) + '</span>'
+            else:
+                song_link = anchor(song_href, esc(s_val), cls="clip song")
+
 
             row1 = (
                 '<tr class="record-top">'
@@ -458,9 +467,16 @@ def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search):
 
             date_href = "?" + urlencode({'date': d_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if d_val else "#"
             song_href = "?" + urlencode({'song': s_val, 'artist': a_val, 'sort_col': sort_col, 'sort_dir': sort_dir, 'mode': 'history', 'search': search}) if s_val else "#"
+            
+            if date == d_val:
+                date_link = '<span class="date-plain">' + esc(d_val) + '</span>'
+            else:
+                date_link = anchor(date_href, esc(d_val), cls="date-text")
 
-            date_link = anchor(date_href, esc(d_val), cls="date-text")
-            song_link = anchor(song_href, esc(s_val), cls="song-pc")
+            if song == s_val and artist == a_val:
+                song_link = '<span class="song-plain">' + esc(s_val) + '</span>'
+            else:
+                song_link = anchor(song_href, esc(s_val), cls="song-pc")
 
             row = (
                 '<tr>'
@@ -495,6 +511,26 @@ def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search):
 
 
 st.set_page_config(page_title="DX-G Viewer", layout="wide")
+
+
+# Streamlit skeleton (ロード中の灰色プレースホルダ) を早期非表示化。
+# st.set_page_config 直後に注入することで、Python 実行中に見える
+# skeleton の表示時間を短縮する（ゼロにはできないが体感的に消える）。
+# e2obbcf 系は Streamlit の skeleton コンポーネント (Emotion CSS)、
+# .stAppSkeleton は skeleton のルート要素。
+# html セレクタを頭に付けて specificity を 0,1,1 に上げ、
+# Streamlit 側の CSS (0,1,0) に勝つ。
+
+st.markdown("""
+<style>
+html [class*="e2obbcf"] {
+  display: none !important;
+}
+html .stAppSkeleton {
+  display: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 DXG_CSS = """
 <style>
@@ -716,7 +752,7 @@ section.main > div.block-container,
 
 .meta-cell-pc { text-align: left !important; text-overflow: ellipsis; }
 .song-pc { color: #1670a8; text-decoration: underline; }
-.artist-pc { color: #666; }
+.artist-pc { color: #31333F; }
 
 .header-container {
   display: grid;
@@ -788,12 +824,27 @@ section.main > div.block-container,
 }
 .sp-body-table .meta-cell { text-align: left; padding: 0 !important; }
 .sp-body-table .clip { display: block; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.sp-body-table .song { color: #1670a8; text-decoration: underline; }
-.sp-body-table .artist { color: #333; text-decoration: none; }
+.sp-body-table .song { color: #0054a3; text-decoration: underline; }
+.sp-body-table .artist { color: #31333F; text-decoration: none; }
 /* record-top 行の td 上罫線 2px黒。ただし最初の record-top（表2の一番上の行）は、表1の下罫線と重なるため 0 にする。 */
 .sp-body-table .record-top td { border-top: 0 !important; }
 .sp-body-table .record-bottom td { border-bottom: 2px solid #666; }
 .date-text { color: #1666aa; text-decoration: underline; }
+
+/* 絞り込み中の一致要素はプレーンテキスト（黒文字、下線なし）で表示。
+   通常表示時のリンク（青文字下線）と区別する。 */
+.date-plain {
+  color: #31333F;
+  text-decoration: none;
+}
+.song-plain {
+  color: #31333F;
+  text-decoration: none;
+}
+.sp-body-table .song-plain {
+  color: #31333F !important;
+  text-decoration: none !important;
+}
 
 .sp-nodate-header {
   display: flex;
