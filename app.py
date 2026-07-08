@@ -566,6 +566,13 @@ section.main > div.block-container,
   white-space: nowrap;
 }
 
+/* Streamlit の stVerticalBlock は縦積み flex + gap: 1rem (16px) で、
+   最初の要素 (nav) の上に 16px の隙間ができる。
+   sticky nav 発動時にこの隙間分ずれて見えるため、gap を 0 に潰す。 */
+.stVerticalBlock {
+  gap: 0 !important;
+}
+
 /* nav 系 (変更なし) */
 .custom-nav {
   position: sticky;
@@ -949,9 +956,14 @@ section.main > div.block-container,
   .sp-header-table .header-container {
     display: grid;
     grid-auto-rows: 1fr;
+    grid-template-columns: 100%;  /* 1列で幅100% */
+    /* または grid-template-columns: minmax(0, 1fr); */
   }
   .sp-header-table .header-container > * {
+    min-width: 0;
     min-height: 0;
+    overflow: hidden;
+    box-sizing: border-box;
   }
   .sp-header-table .header-container .sort-link { justify-content: center !important; }
 
