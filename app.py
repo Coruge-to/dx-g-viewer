@@ -179,7 +179,7 @@ def normalize(df):
 
     if col["datetime"]:
         out["play_datetime"] = df[col["datetime"]].astype(str)
-        out["play_dt"] = pd.to_datetime(out["play_datetime"], errors="coerce")
+        out["play_dt"] = pd.to_datetime(out["play_datetime"], format="mixed", errors="coerce")
         out["play_date"] = out["play_dt"].dt.strftime("%y/%m/%d")
     else:
         out["play_datetime"] = ""
