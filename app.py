@@ -945,7 +945,7 @@ section.main > div.block-container,
    拡大の開始幅(1300px)を下げるほど、レイアウト幅が狭くなる: レイアウト幅 = (画面幅 - 32px) / zoom */
 :root { --tbl-zoom: 1; --tbl-layout-w: 1440px; }
 @media screen and (min-width: 1300px) {
-  :root { --tbl-zoom: 1.3; --tbl-layout-w: 1100px; }
+  :root { --tbl-zoom: 1.4; --tbl-layout-w: 1020px; }
 }
 @media screen and (min-width: 1000px) {
   .pc-table-wrapper { zoom: var(--tbl-zoom); max-width: var(--tbl-layout-w); }
