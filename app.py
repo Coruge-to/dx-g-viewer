@@ -261,7 +261,9 @@ def get_search_iframe_srcdoc(keyword):
       form { margin: 0; display: flex; }
       input {
         width: 100%; height: 32px; 
-        padding: 6px 12px 6px 30px;
+        /* 上下の余白を非対称にして、文字(プレースホルダー)を約1.5px下げる。
+           そのままだと日本語フォントの字面が枠の中心より約1.4px上に見えるため */
+        padding: 8px 12px 5px 30px;
         border: 1px solid #ccc;
         border-radius: 4px; color: #333; font-size: 14px; outline: none; box-sizing: border-box;
         background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="%23888888" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>');
@@ -930,6 +932,36 @@ section.main > div.block-container,
 @media screen and (min-width: 1000px) {
   .view-sp, .sp-search-bar, .sp-dropdown, .hidden-toggle { display: none !important; }
   .view-pc { display: block; width: 100%; }
+}
+
+/* PC版の表の拡大 (プレビュー中): 表の見た目の幅は変えず、文字と列を大きく見せる。
+   画面幅(CSS px)が 1300px 以上のときだけ、表を「--tbl-layout-w の幅(1100px)」でレイアウトし、
+   それを --tbl-zoom 倍(1.3)に拡大して 1430px (= 1100 x 1.3) の見た目の幅に収める。
+   ナビ(タイトル・検索・タブ)も同じ倍率で拡大する。
+   - 1000〜1299px: 拡大なし (1024pxのiPad縦向きはこの範囲。拡大するとレイアウト幅が約760pxまで縮み、数値列が切れる)
+   - 1000px未満: スマホ版
+   調整: 見た目の幅 = --tbl-layout-w x --tbl-zoom。幅を変えず大きくしたいときは layout-w を下げて zoom を上げる。
+   (layout-w は約800pxで数値列が切れ始める。曲名の省略は layout-w を下げるほど増える)
+   拡大の開始幅(1300px)を下げるほど、レイアウト幅が狭くなる: レイアウト幅 = (画面幅 - 32px) / zoom */
+:root { --tbl-zoom: 1; --tbl-layout-w: 1440px; }
+@media screen and (min-width: 1300px) {
+  :root { --tbl-zoom: 1.3; --tbl-layout-w: 1100px; }
+}
+@media screen and (min-width: 1000px) {
+  .pc-table-wrapper { zoom: var(--tbl-zoom); max-width: var(--tbl-layout-w); }
+  /* ナビ(タイトル・検索・タブ)も表と同じ倍率・同じレイアウト幅にする。
+     ナビの高さ70pxも同じ倍率で拡大されるので、表の見出しの固定位置(top: 70px)は、
+     同じ zoom の内側にあるためそのままで、ナビの直下になる */
+  .custom-nav { zoom: var(--tbl-zoom); max-width: var(--tbl-layout-w); }
+  /* タイトルの文字の見た目の中心が、文字枠の中心より約2px(1.3倍で約2.5px)上に出るため、
+     上端〜灰色の横線の間で上下中央に見えるよう下へ寄せる */
+  .nav-brand { position: relative; top: 2px; }
+  /* タブ(歌唱履歴・曲別最高点・その他集計)の文字も同様に約1.5px(1.3倍で約2px)上に出るため下へ寄せる。
+     寄せ方は「タブ全体(ホバー時の灰色の長方形ごと)を0.25px」+「文字だけをさらに1.25px」で、
+     文字は合計1.5px下がり、長方形はほぼ上下中央(約0.3px下)に来る */
+  .nav-tabs { position: relative; top: 0.25px; }
+  .nav-tabs a { padding-top: 2.5px; }
+  /* 注意: 検索欄(.pc-search-form)は .nav-tabs の内側にあるので、.nav-tabs を動かすと検索欄も一緒に動く */
 }
 @media screen and (max-width: 999px) {
   .view-pc { display: none !important; }
