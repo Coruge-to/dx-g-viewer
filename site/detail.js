@@ -417,7 +417,7 @@ export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
     songPos = { x0: 0, y0: leftH + 4 + dy, W: 450, H: 268 };
     chart = sep(p, 10, leftH - 2, 430) + (plays.length ? songChartSVG(plays, r.scoringDxgId, 0, leftH + 4, 450, 268, p) : "");
   }
-  const body = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H + dy}" viewBox="0 0 ${W} ${H + dy}" font-family="${FONT}" font-weight="bold">${defs(p)}<rect width="${W}" height="${H + dy}" rx="6" fill="${BG}"/>${titleSVG}<g transform="translate(0 ${f(dy)})">${s}${chart}</g></svg>`;
+  const body = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H + dy}" viewBox="0 0 ${W} ${H + dy}" font-family="${FONT}" font-weight="bold">${defs(p)}<rect width="${W}" height="${H + dy}" fill="${BG}"/>${titleSVG}<g transform="translate(0 ${f(dy)})">${s}${chart}</g></svg>`;
   // マウスを乗せたときの表示(ホバー)用: グラフの位置と値 (画像は動かないので、位置は画像の座標で持つ)
   const sec = (kind) => Array.from({ length: 24 }, (_, i) => num(r[`${kind}GraphPointsSection${String(i + 1).padStart(2, "0")}`]));
   const hot = {
@@ -444,6 +444,7 @@ export async function svgToPngBlob(svg, width, height, scale = 2) {
     const c = document.createElement("canvas");
     c.width = Math.round(width * scale); c.height = Math.round(height * scale);
     const ctx = c.getContext("2d");
+    ctx.fillStyle = BG; ctx.fillRect(0, 0, c.width, c.height);          // 先に背景色で塗りつぶす: 保存画像は、四隅も端も、透明にならない(完全に不透明な長方形)
     ctx.drawImage(img, 0, 0, c.width, c.height);
     return await new Promise((res) => c.toBlob(res, "image/png"));
   } finally { URL.revokeObjectURL(url); }
