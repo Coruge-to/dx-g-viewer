@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
@@ -5,7 +6,8 @@ import pandas as pd
 import streamlit as st
 import html
 
-BACKUP_DIR = Path(r"C:\Users\tsuru\Documents\Program\DAM\backup")
+# 環境変数 DXG_BACKUP_DIR があればそれを使い、無ければリポジトリの隣の backup フォルダを見る
+BACKUP_DIR = Path(os.environ.get("DXG_BACKUP_DIR") or Path(__file__).resolve().parent.parent / "backup")
 
 VIBRATO_TYPE_MAP = {
     0: "N", 1: "A-1", 2: "B-1", 3: "C-1", 4: "A-2", 5: "B-2", 6: "C-2",
