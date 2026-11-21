@@ -630,6 +630,18 @@ export async function openDetail(record, all, opts = {}) {
   // OSの「視覚効果を減らす」の設定は、無視して、動きを出す(約1秒の短い動き)。設定を尊重したいときは、opts.respectReducedMotion = true
   const animate = opts.animate !== false && !(opts.respectReducedMotion && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   const fullPromise = svgToPngBlob(svg, width, height, scale);                       // 完成した静止画像 (保存用・最終表示)
+  // 完成した画像の準備: 動きの終わりを待たずに、できしだい、ほぼ透明にして、重ねる。動きの最中に、右クリック・長押しで保存しても、完成した絵が保存される
+  const alt = `${record.contentsName} ${record.totalPoint}点の採点結果`;
+  const savePromise = (async () => {
+    const blob = await fullPromise;
+    if (token !== openToken) return null;
+    objUrl = URL.createObjectURL(blob);
+    const im = mkImg(objUrl, alt);
+    try { await im.decode(); } catch { /* そのまま表示 */ }
+    if (token !== openToken) return null;
+    im.dataset.pxw = String(Math.round(width * scale)); im.dataset.pxh = String(Math.round(height * scale));
+    return im;
+  })();
   let stage = null;
   if (animate) {
     const staticSvg = svg.replace("</defs>", "</defs><style>[data-a]{display:none}</style>");   // 動く部分(data-a)を除いた静止画像
@@ -649,15 +661,15 @@ export async function openDetail(record, all, opts = {}) {
     stage.className = "dd-stage";
     stage.append(base, holder);
     wrap.append(stage);
+    // 動きは、すぐ始める(完成した画像の生成を、待たない)。完成した画像(保存用)は、できしだい、ほぼ透明にして、一番上に重ねる。
+    // できるまでの間(動きの最初の約0.4秒)は、下の層の静止画像を保存の対象から外してある(detail.css)ので、レーダーやグラフのない絵が、保存されることはない
+    savePromise.then((im) => { if (im && token === openToken && !im.isConnected) { im.classList.add("dd-save"); stage.append(im); } });
     if (!(await playIntro(el, anim, () => token !== openToken))) return;
   }
-  const blob = await fullPromise;
-  if (token !== openToken) return;
-  objUrl = URL.createObjectURL(blob);
-  const img = mkImg(objUrl, `${record.contentsName} ${record.totalPoint}点の採点結果`);
-  try { await img.decode(); } catch { /* そのまま表示 */ }
-  if (token !== openToken) return;
-  if (stage) stage.replaceWith(img); else wrap.append(img);          // 動きが終わったら、完成した静止画像に差し替える
+  const img = await savePromise;
+  if (!img || token !== openToken) return;
+  // 動きが終わっても、下の層(静止画像)と上の層(動いたSVG)は、そのまま見せ続ける(完成した画像に差し替えると、線のにじみ方が変わって、切り替わりが見えるため)。
+  // 完成した画像(保存用)は、ほぼ透明にして、真上に重ねる。右クリック・長押しの保存と、マウスを乗せたときの吹き出しは、この画像で受ける。
+  if (!img.isConnected) { if (stage) { img.classList.add("dd-save"); stage.append(img); } else wrap.append(img); }
   attachHover(wrap, img, hot, zoom);
-  img.dataset.pxw = String(Math.round(width * scale)); img.dataset.pxh = String(Math.round(height * scale));
 }

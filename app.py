@@ -1045,7 +1045,10 @@ section.main > div.block-container,
 .others-wrap > div { margin: 0 0 14px; }                         /* 区画の下の余白 */
 .o-bar, .o-pie { min-width: 0; }   /* 幅の比は、2つの区画の描画幅の比と同じ(各区画の style に flex で指定)。間の余白(36px)を除いた幅を、この比で分けるので、2つの区画は、常に、同じ倍率で拡大・縮小され、高さがそろう */
 .others-wrap svg { display: block; }
-.others-img { display: block; width: 100%; height: auto; -webkit-touch-callout: default; }   /* 動きのあとに、区画の画像(右クリック・長押しで保存できる)に差し替える */
+/* 動きのあとに、保存用の画像(右クリック・長押しで保存できる)を、SVGの真上に、ほぼ透明で重ねる(SVGは、そのまま見せ続ける) */
+.o-pc, .o-sp { position: relative; }
+.others-ovl { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+.others-img { display: block; width: 100%; height: auto; opacity: .01; pointer-events: auto; -webkit-touch-callout: default; }
 /* 画面の幅で、PC用(幅576)とスマホ用(幅420)を切り替える (表の .view-pc/.view-sp は、下に40pxの余白が付くので、使わない) */
 /* 区画の箱は flow-root にする: 画像の負の余白(表示の大きさを保つためのもの)が、箱の外へ突き抜けて、次の区画の位置を動かすのを防ぐ(縦並びのスマホ版で、画像に差し替わる瞬間に、下の区画が、約58px、下へずれていた) */
 .o-pc { display: flow-root; }
@@ -1290,11 +1293,14 @@ st.html(
       // (縦の余白の割合も、親の「幅」に対する割合になる(CSSの決まり)ので、幅 vb.width を基準にそろえる)
       out.style.width = ((vb.width + 2 * MX) / vb.width * 100) + "%"; out.style.maxWidth = "none";
       out.style.marginLeft = (-MX / vb.width * 100) + "%"; out.style.marginTop = (-MY / vb.width * 100) + "%"; out.style.marginBottom = (-MY / vb.width * 100) + "%";
-      svg.replaceWith(out); URL.revokeObjectURL(url);
+      // SVGは、そのまま残す(画像に差し替えると、文字や線のにじみ方が変わって、切り替わりが見えるため)。保存用の画像は、ほぼ透明にして、SVGの真上に重ねる(右クリック・長押しは、この画像に効く)
+      const ovl = document.createElement("div"); ovl.className = "others-ovl"; ovl.appendChild(out);
+      svg.parentNode.appendChild(ovl); URL.revokeObjectURL(url);
     } catch (e) { console.error("others: 画像への差し替えに失敗(SVGのまま表示を続ける)", e); }
   };
-  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("go"); io.unobserve(e.target); setTimeout(() => toImage(e.target), 2100); } }), { threshold: 0.3 });
-  const scan = () => document.querySelectorAll(".others-chart:not([data-o])").forEach((el) => { el.dataset.o = "1"; io.observe(el); });
+  // 保存用の画像は、動きの終わりを待たず、グラフが現れた時点で、すぐ作って重ねる(SVGの完成形から作るので、動きの最中でも、完成した絵が保存される)
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("go"); io.unobserve(e.target); } }), { threshold: 0.3 });
+  const scan = () => document.querySelectorAll(".others-chart:not([data-o])").forEach((el) => { el.dataset.o = "1"; io.observe(el); toImage(el); });
   new MutationObserver(scan).observe(document.body, { childList: true, subtree: true }); scan();
   document.addEventListener("click", async (e) => {
     const td = e.target.closest && e.target.closest("td[data-sid]");
