@@ -30,6 +30,21 @@ svg { vertical-align: middle; }
 tr { border-top: 1px solid rgba(49, 51, 63, 0.1); }
 .md a { color: rgb(0, 84, 163); }
 
+/* 検索欄(静的サイトで追加。Streamlit 版では、別の小さなページ(iframe)の中の入力欄だった。見た目は、それと同じ) */
+.srch { margin: 0; display: flex; }
+.srch input {
+  width: 100%; height: 32px;
+  /* 上下の余白を非対称にして、文字(プレースホルダー)を約1.5px下げる。そのままだと日本語フォントの字面が枠の中心より約1.4px上に見えるため */
+  padding: 7px 12px 6px 30px;
+  border: 1px solid #ccc;
+  border-radius: 4px; color: #333; font-size: 14px; outline: none; box-sizing: border-box;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="%23888888" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>');
+  background-repeat: no-repeat;
+  background-position: 8px center;
+}
+.srch input:focus { border-color: #1666aa; box-shadow: 0 0 4px rgba(22,102,170,0.3); }
+.srch input::placeholder { color: #aaa; }
+
 /* ===== ここから、Streamlit 版と同じ ===== */
 :root {
   --pc-td-pad-num: 0px;

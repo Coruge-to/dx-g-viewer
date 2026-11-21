@@ -391,49 +391,29 @@ function renderPager(page, totalPages, st) {
 }
 
 // ---------- 上のナビ(タイトル・検索・タブ) ----------
-const SEARCH_SRCDOC = `
-<!DOCTYPE html>
-<html><head><style>
-  body { margin: 0; padding: 0; background: transparent; font-family: sans-serif; }
-  form { margin: 0; display: flex; }
-  input {
-    width: 100%; height: 32px;
-    padding: 7px 12px 6px 30px;
-    border: 1px solid #ccc;
-    border-radius: 4px; color: #333; font-size: 14px; outline: none; box-sizing: border-box;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="%23888888" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>');
-    background-repeat: no-repeat;
-    background-position: 8px center;
-  }
-  input:focus { border-color: #1666aa; box-shadow: 0 0 4px rgba(22,102,170,0.3); }
-  input::placeholder { color: #aaa; }
-</style>
-<script>
-  function submitSearch(e, form) {
+// 検索欄は、ページの中に、直接、作る(以前は、別の小さなページ(iframe)に入れていた。iframe は、本体より少し遅れて読み込まれるので、窓が一瞬遅れて出ていた)。
+// 見た目は、以前の iframe の中の入力欄と同じ(viewer.css の .srch)。送信の処理は、initSearch()。
+const searchForm = (kw, style) =>
+  '<form class="srch" style="' + style + '"><input type="text" name="search" value="' + escHtml(kw) + '" placeholder="曲名 or 歌手名"></form>';
+
+/** 検索の送信: 今のアドレスの、search の条件だけを入れ替える(ほかの条件は、そのまま)。結果が変わるので、ページ送りは、1ページ目に戻す */
+function initSearch() {
+  document.addEventListener("submit", (e) => {
+    const form = e.target;
+    if (!form.classList || !form.classList.contains("srch")) return;
     e.preventDefault();
-    var val = form.search.value;
-    var topUrl = new URL(window.top.location.href);
-    if (val) {
-      topUrl.searchParams.set('search', val);
-    } else {
-      topUrl.searchParams.delete('search');
-    }
-    window.top.location.href = topUrl.toString();
-  }
-<\/script>
-</head>
-<body>
-  <form onsubmit='submitSearch(event, this)'>
-    <input type='text' name='search' value='__KW__' placeholder='曲名 or 歌手名'>
-  </form>
-</body></html>
-`;
+    const val = form.search.value;
+    const url = new URL(location.href);
+    if (val) url.searchParams.set("search", val); else url.searchParams.delete("search");
+    url.searchParams.delete("page");
+    location.href = url.toString();
+  });
+}
 
 const SEARCH_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
 const MENU_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>';
 
 function renderNav(st) {
-  const srcdoc = escHtml(SEARCH_SRCDOC.replace("__KW__", escHtml(st.search)));
   const act = (m) => (st.mode === m ? "active" : "");
   const tabHist = anchor("./", "歌唱履歴", act("history"));          // 歌唱履歴は、既定の画面(アドレスの条件なし)
   const tabBest = anchor("?best", "曲別最高点", act("best"));
@@ -444,7 +424,7 @@ function renderNav(st) {
     '<div class="custom-nav">'
     + '<div class="nav-brand">精密集計DX-G</div>'
     + '<div class="nav-tabs">'
-    + (showSearch ? '<div class="pc-search-form"><iframe srcdoc="' + srcdoc + '" style="width: 220px; height: 32px; border: none; overflow: hidden;" scrolling="no" frameborder="0"></iframe></div>' : "")
+    + (showSearch ? '<div class="pc-search-form">' + searchForm(st.search, "width: 220px; height: 32px;") + "</div>" : "")
     + tabHist + tabBest + tabOther
     + "</div>"
     + '<div class="nav-sp-icons">'
@@ -453,7 +433,7 @@ function renderNav(st) {
     + "</div>"
     + "</div>"
     + '<input type="checkbox" id="search-toggle" class="hidden-toggle" ' + searchChecked + ">"
-    + (showSearch ? '<div class="sp-search-bar"><div class="sp-panel"><div class="sp-panel-inner"><iframe srcdoc="' + srcdoc + '" style="width: 100%; height: 32px; border: none; overflow: hidden; display: block;" scrolling="no" frameborder="0"></iframe></div></div></div>' : "")
+    + (showSearch ? '<div class="sp-search-bar"><div class="sp-panel"><div class="sp-panel-inner">' + searchForm(st.search, "width: 100%; height: 32px;") + "</div></div></div>" : "")
     + '<input type="checkbox" id="menu-toggle" class="hidden-toggle">'
     + '<div class="sp-dropdown"><div class="sp-panel"><div class="sp-panel-inner">'
     + tabHist + tabBest + tabOther
@@ -529,6 +509,7 @@ async function main() {
     app.innerHTML = renderNav(st) + buildTables(toRows(records), st);
   }
   document.title = "DX-G Viewer";
+  initSearch();
 
   // 表の画像保存(右クリック・長押し)
   import("./tablesave.js" + V).then((m) => m.initTableSave()).catch((e) => console.error("tablesave", e));
