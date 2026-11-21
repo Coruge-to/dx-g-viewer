@@ -1,0 +1,582 @@
+/* ===== 静的サイト用の、ページの土台 =====
+   Streamlit が、もともと与えていた、ページの土台の見た目(フォント・文字の大きさ・行の高さ・文字色・左右の余白)。
+   これより下は、Streamlit 版(app.py の DXG_CSS)と同じ。 */
+@font-face {
+  font-family: "Source Sans";
+  src: url("fonts/SourceSansVF-Upright.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+html { -webkit-text-size-adjust: 100%; }
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Source Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgb(49, 51, 63);
+  background: #fff;
+  text-align: left;
+}
+svg { vertical-align: middle; }
+#app { padding: 0 1rem; }
+/* Streamlit の Markdown の中の表・リンクの既定(これを、そろえないと、行の高さとリンクの色が、ずれる) */
+tr { border-top: 1px solid rgba(49, 51, 63, 0.1); }
+.md a { color: rgb(0, 84, 163); }
+
+/* ===== ここから、Streamlit 版と同じ ===== */
+:root {
+  --pc-td-pad-num: 0px;
+  --pc-td-pad-txt: clamp(4.5px, calc(-19.5px + 2.4vw), 15.06px);
+}
+
+header[data-testid="stHeader"] {
+  display: none !important;
+}
+
+[data-testid="stMainBlockContainer"],
+section.main > div.block-container,
+.stApp .main .block-container,
+.stApp .block-container {
+  max-width: 100% !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+  padding-top: 0 !important;
+  /* 下の余白: Streamlit の標準は 160px(10rem)。これを、Markdown の部品の「下の負の余白(-16px)」を打ち消す16pxだけにして、
+     ページの一番下の部品(ページ送り)の下端が、スクロールの下端になるようにする */
+  padding-bottom: 16px !important;
+}
+
+.dxg-table {
+  border-collapse: collapse;
+  font-family: Arial, "Yu Gothic", sans-serif;
+  font-size: 14px;
+}
+.dxg-table th, .dxg-table td {
+  border: 1px solid #bdbdbd;
+  padding: 4px 5px;
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Streamlit の stVerticalBlock は縦積み flex + gap: 1rem (16px) で、
+   最初の要素 (nav) の上に 16px の隙間ができる。
+   sticky nav 発動時にこの隙間分ずれて見えるため、gap を 0 に潰す。 */
+.stVerticalBlock {
+  gap: 0 !important;
+}
+
+/* nav 系 (変更なし) */
+.custom-nav {
+  position: sticky;
+  top: 0;
+  z-index: 300;
+  background: #ffffff;
+  height: 70px;
+  box-sizing: border-box;
+}
+.sp-search-bar, .sp-dropdown {
+  position: sticky;
+  top: 70px;
+  z-index: 250;
+  background: #f8f8f8;
+}
+
+.dxg-table th.no-col { text-align: left !important; padding-left: 8px !important; }
+
+.sort-link {
+  display: flex; align-items: center; justify-content: center;
+  padding: 4px 6px; color: #222 !important; text-decoration: none !important;
+  box-sizing: border-box; height: 100%; border-radius: 0 !important;
+}
+.sort-link:hover { background: rgba(0,0,0,0.05); }
+.sort-link.active-desc { background: #b00000 !important; color: white !important; }
+.sort-link.active-asc  { background: #0044b0 !important; color: white !important; }
+
+.custom-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px 14px 10px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.custom-nav::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  height: 2px;
+  background: #ddd;
+}
+
+.nav-brand {
+  font-size: 24px; font-weight: bold; color: #1666aa;
+  display: inline-flex; align-items: center;
+  height: 40px;
+}
+.nav-tabs { display: flex; align-items: center; }
+.nav-tabs a {
+  padding: 0 20px;
+  height: 40px;
+  display: inline-flex; align-items: center;
+  box-sizing: border-box;
+  color: #555 !important; text-decoration: none !important;
+  font-weight: bold; border-radius: 4px !important; transition: background .15s;
+}
+.nav-tabs a:hover { background: #f0f0f0; }
+.nav-tabs a.active { color: #1666aa !important; }
+
+.pc-search-form {
+  margin-right: 20px;
+  height: 40px;
+  display: inline-flex; align-items: center;
+}
+
+.nav-sp-icons { display: none; font-size: 20px; color: #555; gap: 10px; align-items: center; }
+.icon-label { cursor: pointer; border: 1px solid #ddd; background: #f8f8f8; border-radius: 4px; user-select: none; }
+.icon-label:active { background: #eee; }
+.hidden-toggle { display: none; }
+
+/* スマホ版のメニュー(三本線)と検索欄: 上から順にあらわれて開き、閉じるときは上へ消える(約0.35秒。元サイトの動きを動画から測った値)。
+   表を押し下げず、表の上に重ねて、clip-path で上から切り抜きを広げる。表の位置の計算(約5万個の要素)が、毎フレーム、いらなくなり、
+   スマホ相当の遅いCPUでも、約60fpsで動く(押し下げる方式は、1枚あたり約200ミリ秒かかっていた)。
+   閉じている間は visibility:hidden で、リンクにフォーカスも当たらない。 */
+.sp-search-bar, .sp-dropdown {
+  position: sticky; z-index: 350; display: block; height: 0; visibility: hidden;      /* ナビ(z-index 300)より前に出して、ナビの下の白い帯の上にも重ねる */
+  transition: visibility 0s linear .5s;
+}
+#search-toggle:checked ~ .sp-search-bar, #menu-toggle:checked ~ .sp-dropdown {
+  visibility: visible; transition: visibility 0s linear 0s;
+}
+/* 上端は、ナビの灰色の線のすぐ下(ナビの下の白い帯 12px の分、上へ寄せる)から始める。下端は、白い余白なしで、表に、そのまま接する */
+.sp-panel { position: absolute; left: 0; right: 0; top: -12px; clip-path: inset(0 0 100% 0); transition: clip-path .5s ease, top .5s ease; }
+#search-toggle:checked ~ .sp-search-bar .sp-panel, #menu-toggle:checked ~ .sp-dropdown .sp-panel { clip-path: inset(0 0 -20px 0); }
+/* 検索欄とメニューが、同時に開いているときは、メニューを、検索欄(高さ53px)のすぐ下に、隙間なく続けて出す */
+#search-toggle:checked ~ #menu-toggle ~ .sp-dropdown .sp-panel { top: 41px; }
+.sp-panel-inner { background: #f8f8f8; border-bottom: 1px solid #ddd; }
+.sp-search-bar .sp-panel-inner { padding: 10px; }
+.sp-dropdown .sp-panel-inner { display: flex; flex-direction: column; }
+.sp-dropdown a { padding: 12px; border-bottom: 1px solid #eee; color: #333 !important; text-decoration: none !important; font-weight: bold;}
+
+.view-pc, .view-sp {
+  padding-bottom: 0;
+  overflow: visible !important;
+}
+/* ページ送り(元サイトの /song と同じ: 「<< < 3 4 5 6 7 8 9 > >>」。現在のページは太字・濃い色、ほかは青いリンク)。
+   ページの一番下にくる部品: この下には、何も置かず、余白も付けない(スクロールの下端 = ページ送りの下端) */
+.pager { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 0 auto; padding: 8px 0 8px; max-width: var(--tbl-layout-w); zoom: var(--tbl-zoom); font: 20px/29px Arial, "Yu Gothic", sans-serif; }
+.pager-space { height: 12px; zoom: var(--tbl-zoom); }   /* ページ送りが出ない(1ページしかない)ときの、表の下の余白: ナビの灰色の線〜表の上端の間隔(12px)と同じ */
+.pager a { color: #428bca !important; text-decoration: none !important; }
+.pager a:hover { text-decoration: underline !important; }
+.pager strong { color: #333; font-weight: 700; }
+.view-sp {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 検索結果 0 件時の空状態メッセージ。表1/表2 は非表示なので、
+   スペースの中央あたりにテキストだけ表示する。 */
+.empty-state {
+  max-width: 1440px;
+  /* 上下のマージンを 0 に、余白は padding のみで確保。
+     結果としてビューの最上部（灰色線の直下）に貼り付く形になる。 */
+  margin: 0 auto;
+  padding: 0px 0px;
+  text-align: center;
+  color: #888;
+  font-size: 20px;
+  font-family: Arial, "Source Sans", sans-serif;
+}
+
+/* ========================================
+   案B: PC版 header table (テーブル全体を sticky) 
+   ======================================== */
+.pc-table-wrapper {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Streamlit または markdown パーサが挿入する余計な margin を潰す。
+   header table は margin 0、body table は margin-top: -1px で
+   1px の隙間を吸収して表2の上に見える灰色1px線を潰す。 */
+.pc-header-table,
+.sp-header-table {
+  margin: 0 !important;
+}
+.pc-body-table,
+.sp-body-table {
+  margin: -1px 0 0 0 !important;
+}
+
+.pc-header-table {
+  width: 100%;
+  table-layout: fixed;
+  border: 2px solid #666;
+  position: sticky;
+  top: 70px;
+  z-index: 100;
+  background: #f8f8f8;
+}
+.pc-header-table thead th {
+  background-color: #f8f8f8;
+  font-weight: bold;
+  color: #222;
+  padding: 0;
+  height: 1px;
+  border: 1px solid #bdbdbd;
+}
+.pc-header-table thead th:first-child {
+  text-align: left;
+  padding-left: 8px;
+}
+.pc-header-table a, .pc-header-table span { font-size: 14px !important; }
+
+/* PC版 body table (通常テーブル、border-topを削って header との境界を統一) */
+.pc-body-table {
+  width: 100%;
+  table-layout: fixed;
+  border: 2px solid #666;
+  border-top: 0;
+}
+.pc-body-table td {
+  text-align: center;
+  font-size: 14px !important;
+  overflow: hidden;
+  white-space: nowrap;
+  /* border-top を 0 にして、各行間の2px黒は border-bottom のみで表現する。これにより表2の最上行と表1の下罫線が重複せず、綺麗に繋がる。 */
+  border-top: 0 !important;
+  border-bottom: 2px solid #666;
+  border-left: 1px solid #bdbdbd;
+  border-right: 1px solid #bdbdbd;
+  padding: 4px var(--pc-td-pad-num);
+}
+
+.pc-body-table td.pc-txt-cell {
+  padding: 4px var(--pc-td-pad-txt);
+}
+.pc-body-table td:first-child {
+  text-align: right;
+  padding-right: 8px;
+}.pc-body-table a, .pc-body-table span { font-size: 14px !important; }
+
+/* 数値スロット */
+.num-slot {
+  display: inline-block;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+  padding: 0;
+}
+
+.meta-cell-pc { text-align: left !important; text-overflow: ellipsis; }
+.song-pc { color: #1670a8; text-decoration: underline; }
+.artist-pc { color: #31333F; }
+
+.header-container {
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  height: 100%;
+}
+.header-container > * {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+}
+.sp-header-table .center-align .header-container > *,
+.pc-header-table .center-align .header-container > * {
+  grid-row: 1 / -1;
+}
+.right-align .sort-link { justify-content: flex-end; }
+
+/* ========================================
+   検索0件時の空状態メッセージ
+   header table の border-bottom (2px黒) を上罫線として利用し、
+   左右下は自身の border で 2px 黒外枠を完成させる。
+   ======================================== */
+.empty-cell {
+  text-align: center !important;
+  padding: 40px 10px !important;
+  color: #888 !important;
+  font-size: 15px !important;
+  border-left: 2px solid #666 !important;
+  border-right: 2px solid #666 !important;
+  border-bottom: 2px solid #666 !important;
+  border-top: 0 !important;
+}
+
+/* ========================================
+   案B: SP版 header/body table
+   ======================================== */
+.sp-header-table {
+  width: 100%;
+  table-layout: fixed;
+  font-size: 11px;
+  border: 2px solid #666;
+  position: sticky;
+  top: 70px;
+  z-index: 100;
+  background: #f8f8f8;
+}
+.sp-body-table {
+  width: 100%;
+  table-layout: fixed;
+  font-size: 11px;
+  border: 2px solid #666;
+  border-top: 0;
+}
+.sp-header-table thead th {
+  background-color: #f8f8f8;
+  font-weight: bold;
+  color: #222;
+  padding: 0;
+  border: 1px solid #bdbdbd;
+  height: 1px;
+}
+
+.sp-body-table td { text-align: center; }
+.sp-body-table .score-cell {
+  text-align: center;
+  font-weight: 500;
+  box-shadow: inset 0 0 8px rgba(255,255,255,0.45);
+  border-bottom: 2px solid #666;
+}
+.sp-body-table .meta-cell { text-align: left; padding: 0 !important; }
+.sp-body-table .clip { display: block; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sp-body-table .song { color: #0054a3; text-decoration: underline; }
+.sp-body-table .artist { color: #31333F; text-decoration: none; }
+/* record-top 行の td 上罫線 2px黒。ただし最初の record-top（表2の一番上の行）は、表1の下罫線と重なるため 0 にする。 */
+.sp-body-table .record-top td { border-top: 0 !important; }
+.sp-body-table .record-bottom td { border-bottom: 2px solid #666; }
+.date-text { color: #1666aa; text-decoration: underline; }
+
+/* 絞り込み中の一致要素はプレーンテキスト（黒文字、下線なし）で表示。
+   通常表示時のリンク（青文字下線）と区別する。 */
+.date-plain {
+  color: #31333F;
+  text-decoration: none;
+}
+.song-plain {
+  color: #31333F;
+  text-decoration: none;
+}
+.sp-body-table .song-plain {
+  color: #31333F !important;
+  text-decoration: none !important;
+}
+
+.sp-nodate-header {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+}
+.sp-no-label {
+  flex: 0 0 42px;
+  min-width: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-weight: bold;
+  color: #222;
+  border-right: 1px solid #bdbdbd;
+  box-sizing: border-box;
+}
+.sp-date-label {
+  flex: 1 1 auto;
+  justify-content: center !important;
+}
+
+.sp-nodate-row {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 100%;
+}
+
+.sp-no-num {
+  flex: 0 0 42px;
+  min-width: 42px;
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: #222;
+  border-right: 1px solid #bdbdbd;
+  box-sizing: border-box;
+}
+.sp-date-val {
+  flex: 1 1 auto;
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 曲別最高点だけ: 日付の右の「回数」(最大2桁)。幅は、見出しと本体で同じ(28px)。日付は、その分、詰まる */
+.sp-cnt-val {
+  flex: 0 0 28px;
+  min-width: 28px;
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+  border-left: 1px solid #bdbdbd;
+  box-sizing: border-box;
+}
+.sp-cnt-label {
+  flex: 0 0 28px;
+  min-width: 28px;
+  border-left: 1px solid #bdbdbd;
+  box-sizing: border-box;
+}
+.sp-song-val {
+  flex: 1 1 auto;
+  padding: 3px 4px;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+}
+.sp-artist-val {
+  flex: 1 1 auto;
+  padding: 3px 4px;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+}
+
+@media screen and (min-width: 1000px) {
+  .view-sp, .sp-search-bar, .sp-dropdown, .hidden-toggle { display: none !important; }
+  .view-pc { display: block; width: 100%; }
+}
+
+/* PC版の表の拡大 (プレビュー中): 表の見た目の幅は変えず、文字と列を大きく見せる。
+   画面幅(CSS px)が 1300px 以上のときだけ、表を「--tbl-layout-w の幅(1100px)」でレイアウトし、
+   それを --tbl-zoom 倍(1.3)に拡大して 1430px (= 1100 x 1.3) の見た目の幅に収める。
+   ナビ(タイトル・検索・タブ)も同じ倍率で拡大する。
+   - 1000〜1299px: 拡大なし (1024pxのiPad縦向きはこの範囲。拡大するとレイアウト幅が約760pxまで縮み、数値列が切れる)
+   - 1000px未満: スマホ版
+   調整: 見た目の幅 = --tbl-layout-w x --tbl-zoom。幅を変えず大きくしたいときは layout-w を下げて zoom を上げる。
+   (layout-w は約800pxで数値列が切れ始める。曲名の省略は layout-w を下げるほど増える)
+   拡大の開始幅(1300px)を下げるほど、レイアウト幅が狭くなる: レイアウト幅 = (画面幅 - 32px) / zoom */
+:root { --tbl-zoom: 1; --tbl-layout-w: 1440px; }
+@media screen and (min-width: 1300px) {
+  :root { --tbl-zoom: 1.4; --tbl-layout-w: 1020px; }
+}
+@media screen and (min-width: 1000px) {
+  .pc-table-wrapper { zoom: var(--tbl-zoom); max-width: var(--tbl-layout-w); }
+  /* ナビ(タイトル・検索・タブ)も表と同じ倍率・同じレイアウト幅にする。
+     ナビの高さ70pxも同じ倍率で拡大されるので、表の見出しの固定位置(top: 70px)は、
+     同じ zoom の内側にあるためそのままで、ナビの直下になる */
+  .custom-nav { zoom: var(--tbl-zoom); max-width: var(--tbl-layout-w); }
+  /* タイトルの文字の見た目の中心が、文字枠の中心より約2px(1.3倍で約2.5px)上に出るため、
+     上端〜灰色の横線の間で上下中央に見えるよう下へ寄せる */
+  .nav-brand { position: relative; top: 2px; }
+  /* タブ(歌唱履歴・曲別最高点・その他集計)の文字も同様に約1.5px(1.3倍で約2px)上に出るため下へ寄せる。
+     寄せ方は「タブ全体(ホバー時の灰色の長方形ごと)を0.25px」+「文字だけをさらに1.25px」で、
+     文字は合計1.5px下がり、長方形はほぼ上下中央(約0.3px下)に来る */
+  .nav-tabs { position: relative; top: 0.25px; }
+  .nav-tabs a { padding-top: 2.5px; }
+  /* 注意: 検索欄(.pc-search-form)は .nav-tabs の内側にあるので、.nav-tabs を動かすと検索欄も一緒に動く */
+}
+@media screen and (max-width: 999px) {
+  .view-pc { display: none !important; }
+  .view-sp { display: block; width: 100%; }
+
+  .nav-tabs { display: none; }
+  .nav-sp-icons { display: flex; }
+
+  .sp-body-table th, .sp-body-table td { padding: 3px 0px; white-space: nowrap; overflow: hidden; }
+  .sp-body-table td.meta-cell { padding: 0 !important; }
+  .sp-body-table .num-slot { padding: 0; }
+  .sp-header-table th { padding: 3px 0px; }
+
+  .sp-body-table .num-slot {
+    font-family: Arial, "Helvetica Neue", sans-serif;
+    letter-spacing: -0.3px;
+  }
+
+  /* SP版 header-container を grid に切り替えて子要素を等分ストレッチ。
+     flex column + flex-grow は Safari の一部で main-axis 拡張が効かないことがあるため
+     grid が確実に動作する。
+     - 点数セル（子1個）: 1行が th 全高を占有 → sort-link 全体が背景色＋クリック可
+     - 3項目セル（素点/ボ点/ボタ 等）: 3行が th 全高を均等に 1/3 ずつ占有
+     min-height: 0 は grid item のデフォルト min-height: auto を上書きし、
+     子要素が想定以上に膨らむのを防ぐ。 */
+  .sp-header-table .header-container {
+    display: grid;
+    grid-auto-rows: 1fr;
+    grid-template-columns: 100%;  /* 1列で幅100% */
+    /* または grid-template-columns: minmax(0, 1fr); */
+  }
+  .sp-header-table .header-container > * {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .sp-header-table .header-container .sort-link { justify-content: center !important; }
+
+  .sp-header-table .header-container > div:not(:last-child),
+  .sp-header-table .header-container > a:not(:last-child) {
+    border-bottom: 1px solid #bdbdbd;
+  }
+
+  .sp-body-table .score-cell { font-size: 12px !important; letter-spacing: -0.7px; }
+
+  .sp-header-table .sort-link { padding: 1px 2px !important; font-size: 11px; line-height: 1.15; }
+  .sp-no-label { padding: 1px 4px !important; line-height: 1.15; }
+
+  /* SP版の空状態メッセージ：フォントサイズと padding を SP 用に調整 */
+  .sp-body-table .empty-cell {
+    font-size: 12px !important;
+    padding: 30px 10px !important;
+  }
+}
+
+/* PC版: 表の行にマウスを乗せたとき、色のついていない部分を、薄い灰色(#eee)にする。点数のセル(色つき)は、そのまま。
+   元サイトの `tbody:hover { background-color: #eee }` と同じ見え方。 */
+.pc-body-table tr:hover td:not(.score-cell-pc) { background-color: #eee; }
+
+/* 「その他集計」(?mode=others): 中央の1列に、グラフを縦に並べる。PC版は、表と同じ倍率で拡大する */
+.others-wrap { display: flex; align-items: flex-start; gap: 0 28px; width: 100%; max-width: var(--tbl-layout-w); margin: 0 auto; padding: 4px 0 24px; zoom: var(--tbl-zoom); }   /* PC版: ナビの灰色の線と同じ長さ(表やナビと同じ最大幅・同じ倍率)に、2つの区画を、横に並べる */
+.others-wrap > div { margin: 0 0 14px; }                         /* 区画の下の余白 */
+.o-bar, .o-pie { min-width: 0; }   /* 幅の比は、2つの区画の描画幅の比と同じ(各区画の style に flex で指定)。間の余白(36px)を除いた幅を、この比で分けるので、2つの区画は、常に、同じ倍率で拡大・縮小され、高さがそろう */
+.others-wrap svg { display: block; }
+/* 動きのあとに、保存用の画像(右クリック・長押しで保存できる)を、SVGの真上に、ほぼ透明で重ねる(SVGは、そのまま見せ続ける) */
+.o-pc, .o-sp { position: relative; }
+.others-ovl { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+.others-img { display: block; width: 100%; height: auto; opacity: .01; pointer-events: auto; -webkit-touch-callout: default; }
+/* 画面の幅で、PC用(幅576)とスマホ用(幅420)を切り替える (表の .view-pc/.view-sp は、下に40pxの余白が付くので、使わない) */
+/* 区画の箱は flow-root にする: 画像の負の余白(表示の大きさを保つためのもの)が、箱の外へ突き抜けて、次の区画の位置を動かすのを防ぐ(縦並びのスマホ版で、画像に差し替わる瞬間に、下の区画が、約58px、下へずれていた) */
+.o-pc { display: flow-root; }
+.o-sp { display: none; }
+@media screen and (max-width: 999px) { .o-pc { display: none; } .o-sp { display: flow-root; } .others-wrap { display: block; max-width: 576px; } }   /* スマホ版: 縦に並べる */
+/* グラフの動き(元サイトと同じ): 棒は下から伸び(約1秒)、円は、真上から時計回りに扇が広がる(約1秒)。数字・ラベルは、そのあと、ふわっと出る。
+   画面に見えたとき(IntersectionObserver が .go を付ける)に、始まる */
+@keyframes ob-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes pie-sweep { from { stroke-dashoffset: var(--c); } to { stroke-dashoffset: 0; } }
+@keyframes o-fade { from { opacity: 0; } to { opacity: 1; } }
+.others-chart .ob { animation: ob-grow 1s cubic-bezier(.2, .7, .3, 1) both; animation-play-state: paused; }
+.others-chart .sweep { animation: pie-sweep 1s ease-out both; animation-play-state: paused; }
+/* 棒グラフの件数と、円グラフのラベルは、同じタイミング(0.6秒後から、0.3秒かけて。棒グラフの件数のタイミングが基準)で出す */
+.others-chart .fadein { animation: o-fade .3s ease-out .6s both; animation-play-state: paused; }
+/* 棒グラフの件数: 定位置で、ふわっと出る。棒が、ほぼ伸び切る(約0.5秒)ころに出始めて、約0.75秒で出そろう */
+.others-chart .ob-num { animation: o-fade .3s ease-out .6s both; animation-play-state: paused; }
+.others-chart.go .ob, .others-chart.go .ob-num, .others-chart.go .sweep, .others-chart.go .fadein { animation-play-state: running; }
+
+/* 点数のセルは、クリックすると採点結果画面が開く */
+.score-cell-pc[data-sid], .score-cell[data-sid] { cursor: pointer; }

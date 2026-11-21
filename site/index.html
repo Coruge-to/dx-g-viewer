@@ -3,36 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>精密集計DX-G</title>
-<style>
-  body { margin: 0; font-family: Arial, "Yu Gothic", sans-serif; color: #222; background: #fff; }
-  main { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
-  h1 { font-size: 24px; color: #1666aa; margin: 0 0 16px; }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; }
-  dt { color: #666; } dd { margin: 0; font-weight: bold; }
-  p { color: #666; font-size: 13px; }
-</style>
+<title>DX-G Viewer</title>
 </head>
 <body>
-<main>
-  <h1>精密集計DX-G</h1>
-  <!-- 配信の土台の確認用ページ。表の画面ができたら、これと入れ替える -->
-  <dl>
-    <dt>歌唱の件数</dt><dd id="count">…</dd>
-    <dt>最新の歌唱</dt><dd id="newest">…</dd>
-    <dt>最古の歌唱</dt><dd id="oldest">…</dd>
-  </dl>
-  <p id="note"></p>
-</main>
-<script>
-fetch("dataset/meta.json", { cache: "no-cache" })
-  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
-  .then((m) => {
-    document.getElementById("count").textContent = m.count + " 件";
-    document.getElementById("newest").textContent = m.newest;
-    document.getElementById("oldest").textContent = m.oldest;
-  })
-  .catch((e) => { document.getElementById("note").textContent = "データを読み込めませんでした: " + e.message; });
-</script>
+<div id="app" class="md"></div>
+<script type="module" src="viewer.js"></script>
 </body>
 </html>
