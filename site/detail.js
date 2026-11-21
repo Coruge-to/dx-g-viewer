@@ -615,11 +615,18 @@ export async function openDetail(record, all, opts = {}) {
   overlay.className = "dd-overlay";
   const wrap = document.createElement("div");
   wrap.className = "dd-wrap";
+  // 外枠の大きさは、画像ができる前(開いた直後)から決めておく(画像が出たときに、位置が動かないように)
+  wrap.style.width = px; wrap.style.aspectRatio = `${width} / ${height}`;
   // 右上の「×」ボタン: 画面の部品として、画像の上に重ねる。画像(PNG)には含まれないので、保存した画像には写らない。Escキー、背景のクリック・タップでも閉じられる
   const btn = document.createElement("button");
   btn.className = "dd-close"; btn.type = "button"; btn.setAttribute("aria-label", "閉じる");
   btn.innerHTML = `<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>`;
   btn.addEventListener("click", closeDetail);
+  // 暗い背景と「×」は、採点結果の画像が見えるのと同時に出す。画像の生成を待つあいだ(開いた直後)に、背景や「×」だけが先に出ないように、最初は隠しておく。
+  // 背景は透明にするだけで、画面全体を覆う枠(overlay)は、開いた直後からある(待つあいだに、裏の表を、うっかり押さないように)
+  btn.style.visibility = "hidden";
+  overlay.style.background = "transparent";
+  const showBtn = () => { btn.style.visibility = ""; overlay.style.background = ""; };
   const mkImg = (url, alt) => { const i = new Image(); i.className = "dd-img"; i.alt = alt; i.style.width = px; i.src = url; return i; };
   wrap.append(btn);
   overlay.appendChild(wrap);
@@ -661,6 +668,7 @@ export async function openDetail(record, all, opts = {}) {
     stage.className = "dd-stage";
     stage.append(base, holder);
     wrap.append(stage);
+    showBtn();
     // 動きは、すぐ始める(完成した画像の生成を、待たない)。完成した画像(保存用)は、できしだい、ほぼ透明にして、一番上に重ねる。
     // できるまでの間(動きの最初の約0.4秒)は、下の層の静止画像を保存の対象から外してある(detail.css)ので、レーダーやグラフのない絵が、保存されることはない
     savePromise.then((im) => { if (im && token === openToken && !im.isConnected) { im.classList.add("dd-save"); stage.append(im); } });
@@ -671,5 +679,6 @@ export async function openDetail(record, all, opts = {}) {
   // 動きが終わっても、下の層(静止画像)と上の層(動いたSVG)は、そのまま見せ続ける(完成した画像に差し替えると、線のにじみ方が変わって、切り替わりが見えるため)。
   // 完成した画像(保存用)は、ほぼ透明にして、真上に重ねる。右クリック・長押しの保存と、マウスを乗せたときの吹き出しは、この画像で受ける。
   if (!img.isConnected) { if (stage) { img.classList.add("dd-save"); stage.append(img); } else wrap.append(img); }
+  showBtn();
   attachHover(wrap, img, hot, zoom);
 }
