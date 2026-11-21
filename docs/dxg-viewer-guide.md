@@ -344,6 +344,20 @@ GitHub Actions（.github/workflows/pages.yml）が、site/ と dataset/ の3フ�
 - 並べ替え・検索・絞り込み・ページ送りは、すべて、ブラウザの中で動きます。条件は、Streamlit版と同じ形のアドレス（`?mode=best&sort_col=...`）で決まります。
 - 公開の範囲は、「Streamlitの表として見える範囲」です。データは、元から、公開リポジトリにあります。
 
+### 9.1.1 画面のアドレス
+
+| 画面 | 短い形 | 長い形 |
+|---|---|---|
+| 歌唱履歴 | `https://coruge-to.github.io/dx-g-viewer/`（条件なし） | `?mode=history` |
+| 曲別最高点 | `…/dx-g-viewer/?best` | `?mode=best` |
+| その他集計 | `…/dx-g-viewer/?stats` | `?mode=stats` |
+
+- 画面の名前は、`history`・`best`・`stats` です。`stats` は、「その他集計」の名前です（もとは `others`）。
+- 短い形は、他の条件と併用できます（例: `?best&page=2`、`?best&sort_col=sing_count&sort_dir=desc`）。
+- 古い名前（`?others`、`?mode=others`、`?mode=statistics`）も、そのまま開きます（以前のブックマークや共有のアドレスのため）。
+- 画面上のタブのリンクは、短い形（`./`、`?best`、`?stats`）です。並べ替え・ページ送り・検索で作られるアドレスには、`mode=` が入ります。
+- Streamlit版のアドレスは、これまでどおり、`?mode=others` です（Streamlit版は、名前を変えていません）。
+
 ### 9.2 ファイル
 
 | ファイル | 役割 |

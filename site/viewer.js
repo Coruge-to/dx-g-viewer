@@ -1,6 +1,6 @@
 // 精密集計DX-G の画面(静的サイト版)。Streamlit 版 (app.py) の、表の部分の移植。
 // データ(dataset/history.jsonl)を読み、歌唱履歴・曲別最高点の表(PC版・スマホ版)と、ページ送りを、ブラウザの中で作る。
-// 並べ替え・絞り込み・検索・ページ送りは、アドレスの条件(?mode=...&sort_col=...)で決まる(Streamlit 版と同じアドレスの形)。
+// 並べ替え・絞り込み・検索・ページ送りは、アドレスの条件(?mode=...&sort_col=...)で決まる(Streamlit 版と同じアドレスの形。画面の名前は、短い別名 ?best ?stats も使える)。
 // 見た目は、Streamlit 版と同じにする(CSSは viewer.css。HTMLの形も同じ)。
 
 const VIBRATO_TYPE_MAP = { 0: "N", 1: "A-1", 2: "B-1", 3: "C-1", 4: "A-2", 5: "B-2", 6: "C-2", 7: "A-3", 8: "B-3", 9: "C-3", 10: "D", 11: "E", 12: "F", 13: "G", 14: "H" };
@@ -190,11 +190,24 @@ function sortRows(rows, col, dir) {
 }
 
 // ---------- アドレスの条件 ----------
+// 画面の名前: history(歌唱履歴) / best(曲別最高点) / stats(その他集計)。
+// アドレスは、?mode=best の形に加えて、短い別名 ?best ・ ?stats ・ ?history でも指定できる(他の条件とも併用できる: ?best&page=2)。
+// 古い名前 others(その他集計の、もとの名前)・statistics も、別名として、残している(以前のブックマーク・共有のアドレスが、そのまま開く)。
+const MODES = ["history", "best", "stats"];
+const MODE_ALIASES = { others: "stats", statistics: "stats" };
+function readMode(q) {
+  const norm = (m) => (MODES.includes(m) ? m : MODE_ALIASES[m] ?? null);
+  const explicit = q.get("mode");
+  if (explicit) return norm(explicit) ?? "history";
+  for (const [k, v] of q) if (v === "" && norm(k)) return norm(k);     // ?best など(値の無い名前)
+  return "history";
+}
+
 function readState() {
   const q = new URLSearchParams(location.search);
   const g = (k) => q.get(k) || "";
   const st = {
-    mode: g("mode") || "history",
+    mode: readMode(q),
     date: g("date"), song: g("song"), artist: g("artist"), search: g("search"),
     sortCol: g("sort_col"), sortDir: g("sort_dir"),
     page: parseInt(g("page") || "1", 10),
@@ -422,10 +435,10 @@ const MENU_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" st
 function renderNav(st) {
   const srcdoc = escHtml(SEARCH_SRCDOC.replace("__KW__", escHtml(st.search)));
   const act = (m) => (st.mode === m ? "active" : "");
-  const tabHist = anchor("?mode=history", "歌唱履歴", act("history"));
-  const tabBest = anchor("?mode=best", "曲別最高点", act("best"));
-  const tabOther = anchor("?mode=others", "その他集計", act("others"));
-  const showSearch = st.mode !== "others";          // 「その他集計」には、検索する対象が無いので、検索欄(PC・スマホとも)を出さない
+  const tabHist = anchor("./", "歌唱履歴", act("history"));          // 歌唱履歴は、既定の画面(アドレスの条件なし)
+  const tabBest = anchor("?best", "曲別最高点", act("best"));
+  const tabOther = anchor("?stats", "その他集計", act("stats"));
+  const showSearch = st.mode !== "stats";        // 「その他集計」には、検索する対象が無いので、検索欄(PC・スマホとも)を出さない
   const searchChecked = st.search ? 'checked="checked"' : "";
   return (
     '<div class="custom-nav">'
@@ -504,7 +517,7 @@ async function main() {
   const text = await loadText("dataset/history.jsonl");
   const records = text.split("\n").filter(Boolean).map((l) => JSON.parse(l));
 
-  if (st.mode === "others") {
+  if (st.mode === "stats") {
     const { renderOthers, initOthers } = await import("./charts.js" + V);
     app.innerHTML = renderNav(st) + renderOthers(toRows(records));
     initOthers();
