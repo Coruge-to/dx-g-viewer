@@ -1199,7 +1199,7 @@ def render_others(df_all):
     return (
         '<div class="others-wrap">'
         + '<div class="o-pc o-bar" style="flex: ' + str(BAR_W) + ' 1 0">' + best_scores_section(best_scores, W=BAR_W, fs=12, body_h=SEC_BODY_H, center_notes=True) + '</div><div class="o-sp">' + best_scores_section(best_scores, W=420, fs=12) + '</div>'
-        + '<div class="o-pc o-pie" style="flex: ' + str(PIE_W) + ' 1 0">' + pie_section(items, W=PIE_W, fs=13, labels_left=True, body_h=SEC_BODY_H, center_notes=True) + '</div><div class="o-sp">' + pie_section(items) + '</div>'
+        + '<div class="o-pc o-pie" style="flex: ' + str(PIE_W) + ' 1 0">' + pie_section(items, W=PIE_W, fs=13, labels_left=True, body_h=SEC_BODY_H, center_notes=True, fan=True) + '</div><div class="o-sp">' + pie_section(items) + '</div>'
         + '</div>'
     )
 

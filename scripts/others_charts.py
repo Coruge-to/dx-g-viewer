@@ -18,6 +18,7 @@ FONT = "Arial, 'Yu Gothic', sans-serif"          # 表と同じフォント
 TITLE_H = 40                                      # 見出しの高さ
 LABEL_GAP = 24                                    # PC用の円グラフ: ラベルの右端と、円の左端の間(線を通す幅)
 EDGE = 8                                          # PC用の円グラフ: 区画の左端〜ラベル、円の右端〜区画の右端、の余白(棒グラフの右の余白 R=8 と同じ)
+HALF = 0.56                                       # ラベルの文字の、上下の広がり(文字の中心から、上端・下端まで = 文字サイズ × 0.56。実測で、上端・下端とも約7.2)
 FIT = 0.975                                       # ラベルの幅の見積もりの余裕(実測の最長ラベルより約0.2%大きい。余白がずれても、文字が、区画の外へ出て切れないように、少しだけ大きめに見積もる)
 BAR_T, BAR_B = 26, 68                             # 棒グラフの、グラフ本体の上の余白(=一番上の目盛り線の位置)と、下の余白
 AXIS_LABEL_DROP = 18                              # 棒グラフのx軸の文字の下端は、グラフの底(0の線)より、約18px下
@@ -126,24 +127,52 @@ def _text_w(s: str, fs: int, margin: float = 1.04) -> float:
     return w * margin                                 # 見積もりの誤差の分の、余裕(既定は4%)
 
 
-def _pie_r(body_h: float) -> float:
-    """PC用の円の半径: 円の上端が棒グラフの「150の線」、下端が「0の線」に、ぴったり合う大きさ(円の直径 = グラフ領域の高さ)"""
-    return (body_h - BAR_T - BAR_B) / 2
+def _angles(items: list[tuple[str, int]]) -> list[dict]:
+    """各扇の、開始・終了の角度(0=真上、時計回り)"""
+    total = sum(c for _, c in items) or 1
+    out, ang = [], 0.0
+    for name, cnt in items:
+        span = cnt / total * 360.0
+        out.append({"name": name, "pct": cnt / total * 100, "a0": ang, "a1": ang + span})
+        ang += span
+    return out
+
+
+def _pie_r(items: list[tuple[str, int]], fs: int, body_h: float) -> float:
+    """PC用の円の半径。下端は、棒グラフの「0の線」に固定する。
+    円の全体 + ひげ + ラベルが、棒グラフの「150の線」〜「0の線」の間に収まる、最大の大きさにする
+    (一番上のラベル(その他など)の文字の上端が、150の線を越えない)。大きすぎるときは、1ずつ小さくして、探す"""
+    r_max = (body_h - BAR_T - BAR_B) / 2                  # 円だけなら、150の線〜0の線の高さがいっぱい
+    bottom = body_h - BAR_B
+    r = r_max
+    while r > 30:
+        pts = _angles(items)
+        _layout_left(pts, 0.0, bottom - r, r, fs, bottom)
+        top_ok = min(p["ly"] for p in pts) - fs * HALF >= BAR_T          # 一番上のラベルの文字の上端が、150の線の内側
+        bottom_ok = max(p["ly"] for p in pts) + fs * HALF <= bottom + 0.01   # 一番下のラベルの文字の下端が、0の線の内側
+        if top_ok and bottom_ok:
+            return r
+        r -= 0.5
+    return r
 
 
 def pie_min_width(items: list[tuple[str, int]], fs: int = 13, body_h: float = 300) -> int:
     """PC用の円グラフ(ラベルを左の1列に並べる)の区画の幅を、ラベルの長さにぴったり合わせた値にする(円の左に、余白を残さない)"""
     total = sum(c for _, c in items) or 1
     label_w = max(_text_w(f"{name}: {cnt / total * 100:.1f} %", fs, FIT) for name, cnt in items) if items else 0
-    r = _pie_r(body_h)
+    r = _pie_r(items, fs, body_h)
     return int(math.ceil(2 * r + LABEL_GAP + 2 * EDGE + label_w))
 
 
-def _left_labels(pts: list[dict], cx: float, cy: float, r: float, fs: int, bottom_y: float, x_lab: float) -> list[str]:
-    """PC用: ラベルを、すべて、円の左の1列(右揃え)に並べる。線は、各扇の左側の弧につなぐ。
+FAN_ATTACH = 200.0                                   # 「下広がり」: 円の下端に近い扇(C-2)のひげが、扇から出る位置の角度(0=真上、時計回り。180=真下)。真下に近いほど、折れ曲がりが下になり、ラベルまでの角度がゆるやかになる
+AXIS_TICK_DY = 15                                     # 棒グラフのx軸の数字(90〜100+)の文字の下の線は、0の線より 15 下(棒グラフ側の描画と同じ値。「点数」の題は 31 下)
+FAN_MIN_DEPTH = 0.6                                   # 「下広がり」にする扇の、深さの下限(0=円の中心と同じ高さ、1=円の下端)。C-3(約0.26)は対象外、C-2(約0.9)は対象
+
+
+def _layout_left(pts: list[dict], cx: float, cy: float, r: float, fs: int, bottom_y: float, fan: bool = False) -> None:
+    """PC用: ラベルの位置を決める(円の左の1列。線は、各扇の左側の弧につなぐ)。
     扇が左半分(180〜360度)にかかるなら、その部分の真ん中、右半分だけなら、180度に近い端につなぐ。
-    上下の順に並べ、重なるときは、間隔(fs+6)を空けて、下へずらす"""
-    out = []
+    上下の順に並べ、重なるときは、間隔(fs+6)を空けて、下へずらす。結果は、各 p の ex,ey,kx,ky,ly に入れる"""
     for p in pts:
         lo, hi = max(p["a0"], 180.0), min(p["a1"], 360.0)
         a = (lo + hi) / 2 if lo < hi else p["a1"] - min(4.0, (p["a1"] - p["a0"]) / 2)
@@ -156,27 +185,44 @@ def _left_labels(pts: list[dict], cx: float, cy: float, r: float, fs: int, botto
     order[0]["ly"] = max(order[0]["ly"], fs * 0.8 + 14)
     for k in range(1, len(order)):
         order[k]["ly"] = max(order[k]["ly"], order[k - 1]["ly"] + pitch)
-    over = order[-1]["ly"] - (bottom_y - fs * 0.4)         # 最下段のラベルの下端が、円の下端(bottom_y)を越えないようにする
+    over = order[-1]["ly"] - (bottom_y - fs * HALF)        # 最下段のラベルの文字の下端が、0の線(bottom_y)を越えないようにする
     if over > 0:
         for p in order:
             p["ly"] -= over
-    for p in order:
+    if fan:                                              # 案「下広がり」: 円の下端に近い扇(C-2)だけ、折れ曲がり(円のすぐ外)は、そのままにして、そこからラベルへ伸びる長い線を、下がる斜めにする(ラベルを、折れ曲がりの位置より下へ)。ほかのラベル(C-3・上の小さい扇)は、上の計算のまま、変えない
+        for p in pts:
+            depth = (p["ky"] - cy) / r                   # 0(円の中心と同じ高さ)〜1(円の下端)
+            if depth >= FAN_MIN_DEPTH:                   # C-2: 出る位置を、弧の下の方(FAN_ATTACH)へ動かし、ラベルは、棒グラフのx軸の数字(90〜100+)と同じ高さ(文字の下の線がそろう)に置く
+                a = min(max(FAN_ATTACH, p["a0"] + 1.0), p["a1"] - 1.0)
+                s, c_ = math.sin(math.radians(a)), math.cos(math.radians(a))
+                p["ex"], p["ey"] = cx + r * s, cy - r * c_
+                p["kx"], p["ky"] = cx + (r + 9) * s, cy - (r + 9) * c_
+                p["ly"] = bottom_y + AXIS_TICK_DY - fs * 0.36
+            elif depth > 0:                              # 円の中心より下で、浅いもの(C-3): 折れ曲がりから伸びる長い線を、x軸と平行(水平)にする(ラベルの高さ = 折れ曲がりの高さ)
+                p["ly"] = p["ky"]
+
+
+def _left_labels(pts: list[dict], cx: float, cy: float, r: float, fs: int, bottom_y: float, x_lab: float, fan: bool = False) -> list[str]:
+    """PC用: ラベルと、扇につなぐひげ(線)の描画"""
+    out = []
+    _layout_left(pts, cx, cy, r, fs, bottom_y, fan)
+    for p in pts:
         out.append(f'<path d="M{_f(p["ex"])} {_f(p["ey"])}L{_f(p["kx"])} {_f(p["ky"])}L{_f(x_lab + 6)} {_f(p["ly"])}" stroke="{p["col"]}" fill="none"/>')
         out.append(f'<text x="{_f(x_lab)}" y="{_f(p["ly"] + fs * 0.36)}" text-anchor="end" font-size="{fs}" fill="#555">{escape(p["name"])}: {p["pct"]:.1f} %</text>')
     return out
 
 
-def pie_section(items: list[tuple[str, int]], W: int = 420, fs: int = 12, r: int | None = None, labels_left: bool = False, body_h: float | None = None, center_notes: bool = False) -> str:
+def pie_section(items: list[tuple[str, int]], W: int = 420, fs: int = 12, r: int | None = None, labels_left: bool = False, body_h: float | None = None, center_notes: bool = False, fan: bool = False) -> str:
     """ビブラートタイプの割合(円グラフ)。items: [(表示名, 件数), ...] (多い順)。割合の表示は小数1桁"""
     total = sum(c for _, c in items) or 1
     wide = W >= 450
     if labels_left:                                       # PC用: 円を右に寄せ、ラベルを左の1列に並べる
         H = body_h or 300
-        r = r or _pie_r(H)                                   # 棒グラフの「150の線〜0の線」の高さに、円の全体が収まる大きさ
+        r = r or _pie_r(items, fs, H)                        # 円 + ひげ + ラベルの全体が、棒グラフの「150の線〜0の線」の間に収まる大きさ(「下広がり」の案でも、円の大きさは変えない)
         label_w = max(_text_w(f"{n}: {c_ / total * 100:.1f} %", fs, FIT) for n, c_ in items) if items else 0
         cx = W - EDGE - r                                    # 円は、右の余白(EDGE)をあけて、右に寄せる
         x_lab = cx - r - LABEL_GAP                           # ラベルの右端(ラベルは、左の余白(EDGE)から始まる幅に収まるよう、区画の幅が決まる)
-        cy = BAR_T + r                                       # 縦の位置: 円の上端が、棒グラフの「150の線」に合う(下端は「0の線」)
+        cy = (H - BAR_B) - r                                 # 縦の位置: 円の下端が、棒グラフの「0の線」に合う(上端は、ラベルが150の線を越えない分だけ、下がる)
     else:
         r = r or (90 if wide else 70)
         cx, cy = W / 2, (110 if wide else r + 28)
@@ -204,7 +250,7 @@ def pie_section(items: list[tuple[str, int]], W: int = 420, fs: int = 12, r: int
     o.append("</g>")
     o.append('<g class="fadein">')                       # ラベルと線は、扇が広がり終わるころに、ふわっと出す
     if labels_left:
-        o.extend(_left_labels(pts, cx, cy, r, fs, cy + r, x_lab))
+        o.extend(_left_labels(pts, cx, cy, r, fs, cy + r, x_lab, fan))
         o.append("</g>")
         return _section(W, "ビブラートタイプ", "".join(o), H, ["直近200曲の上位5つとその他の割合を表しています"], center_notes=center_notes)
     # ラベルの置き方: 円の右側(時計回りで下半分に入る扇)は、扇の外側にそのまま置く。
