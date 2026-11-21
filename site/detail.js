@@ -314,7 +314,7 @@ function songGeom(plays, W, H) {
   return { tall, L, Rm, T0, axisY, pw, ph, yMin, yMax, W, H, n: plays.length };
 }
 
-function songChartSVG(plays, currentId, x0, y0, W, H, p = "") {
+function songChartSVG(plays, currentId, x0, y0, W, H, p = "", cx = W / 2) {   // cx: 凡例を左右中央に揃える位置(このグラフの左端からの距離)
   const { tall, L, Rm, T0, axisY, pw, ph, yMin, yMax } = songGeom(plays, W, H);
   const Y = (v) => T0 + (1 - (clamp(v, yMin, yMax) - yMin) / (yMax - yMin)) * ph;
   const n = plays.length, X = (i) => L + ((i + 0.5) / n) * pw;
@@ -333,10 +333,17 @@ function songChartSVG(plays, currentId, x0, y0, W, H, p = "") {
     vals.forEach((v, i) => { s += marker(se.shape, X(i), Y(v), se.color, plays[i].scoringDxgId === currentId ? 5 : 4); });
   }
   s += `</g>`;
-  SERIES.forEach((se, i) => {
-    const row = i < 3 ? 0 : 1, col = i < 3 ? i : i - 3, x = L + 9 + col * 80, y = H - 42 + row * 18;   // 上段: 総合点・素点・音程 / 下段: 安定性・表現力・リズム・V&L
-    s += `<line x1="${x}" y1="${y}" x2="${x + 20}" y2="${y}" stroke="${se.color}" stroke-width="2"/>${marker(se.shape, x + 10, y, se.color, 3.8)}`;
-    s += T(x + 25, y + 4.5, se.name, { size: 13 });
+  // 凡例: 上段(総合点・素点・音程の3つ)と下段(安定性・表現力・リズム・V&Lの4つ)を、列を揃えたまま、2行まとめた「ひとかたまり」として、cx を中心に左右中央に置く
+  const legendRows = [SERIES.slice(0, 3), SERIES.slice(3)], GAP = 22;
+  const colW = [0, 1, 2, 3].map((k) => Math.max(...legendRows.map((r) => (r[k] ? 25 + measure(r[k].name, 13) : 0))));   // 各列の幅 = その列の項目のうち、いちばん広いもの
+  const blockW = colW.reduce((a, b) => a + b, 0) + GAP * 3, bx0 = cx - blockW / 2;
+  legendRows.forEach((rowItems, row) => {
+    const y = H - 42 + row * 18;
+    rowItems.forEach((se, k) => {
+      const x = bx0 + colW.slice(0, k).reduce((a, b) => a + b, 0) + GAP * k;
+      s += `<line x1="${f(x)}" y1="${y}" x2="${f(x + 20)}" y2="${y}" stroke="${se.color}" stroke-width="2"/>${marker(se.shape, x + 10, y, se.color, 3.8)}`;
+      s += T(x + 25, y + 4.5, se.name, { size: 13 });
+    });
   });
   return s + `</g>`;
 }
@@ -416,7 +423,7 @@ export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
   if (wide) {
     W = 900; H = Math.max(leftH, 40 + 400 + 8);
     songPos = { x0: 454, y0: 40 + dy, W: 440, H: 400 };
-    chart = plays.length ? songChartSVG(plays, r.scoringDxgId, 454, 40, 440, 400, p) : "";
+    chart = plays.length ? songChartSVG(plays, r.scoringDxgId, 454, 40, 440, 400, p, (453 + 900) / 2 - 454) : "";
     chart += `<rect x="451" y="40" width="2" height="${H - 48}" fill="#1d3ea0"/>`;
   } else {
     W = 450; H = leftH + 4 + 268 - 5;   // 下の余白(最後の凡例の文字〜下端)を、上の余白(上端〜タイトル=13.5px)に揃える

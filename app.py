@@ -178,6 +178,7 @@ def normalize(df):
         "longtone": pick_col(df, ["ロングトーンスキル", "longtoneSkill"]),
         "timing": pick_col(df, ["リズムタイミング", "timing"]),
         "score_id": pick_col(df, ["採点ID", "scoringDxgId"]),
+        "request_no": pick_col(df, ["requestNo"]),
     }
 
     if col["datetime"]:
@@ -190,6 +191,7 @@ def normalize(df):
         out["play_date"] = ""
 
     out["score_id"] = df[col["score_id"]].astype(str).str.replace(r"\.0$", "", regex=True) if col["score_id"] else ""
+    out["request_no"] = df[col["request_no"]].astype(str) if col["request_no"] else ""
     out["song_name"] = df[col["song"]].astype(str) if col["song"] else ""
     out["artist_name"] = df[col["artist"]].astype(str) if col["artist"] else ""
 
@@ -1038,18 +1040,52 @@ section.main > div.block-container,
    元サイトの `tbody:hover { background-color: #eee }` と同じ見え方。 */
 .pc-body-table tr:hover td:not(.score-cell-pc) { background-color: #eee; }
 
+/* 「その他集計」(?mode=others): 中央の1列に、グラフを縦に並べる。PC版は、表と同じ倍率で拡大する */
+.others-wrap { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 0 14px; max-width: 960px; margin: 0 auto; padding: 4px 8px 24px; zoom: var(--tbl-zoom); }   /* PC版: 2つの区画を、横に並べる(幅が足りないときは、縦に折り返す) */
+.others-wrap > div { margin: 0 0 14px; }                         /* 区画の下の余白 */
+.o-bar { width: 440px; } .o-pie { width: 440px; }
+.others-wrap svg { display: block; }
+.others-img { display: block; width: 100%; height: auto; -webkit-touch-callout: default; }   /* 動きのあとに、区画の画像(右クリック・長押しで保存できる)に差し替える */
+/* 画面の幅で、PC用(幅576)とスマホ用(幅420)を切り替える (表の .view-pc/.view-sp は、下に40pxの余白が付くので、使わない) */
+/* 区画の箱は flow-root にする: 画像の負の余白(表示の大きさを保つためのもの)が、箱の外へ突き抜けて、次の区画の位置を動かすのを防ぐ(縦並びのスマホ版で、画像に差し替わる瞬間に、下の区画が、約58px、下へずれていた) */
+.o-pc { display: flow-root; }
+.o-sp { display: none; }
+@media screen and (max-width: 999px) { .o-pc { display: none; } .o-sp { display: flow-root; } .others-wrap { display: block; max-width: 576px; } }   /* スマホ版: 縦に並べる */
+/* グラフの動き(元サイトと同じ): 棒は下から伸び(約1秒)、円は、真上から時計回りに扇が広がる(約1秒)。数字・ラベルは、そのあと、ふわっと出る。
+   画面に見えたとき(IntersectionObserver が .go を付ける)に、始まる */
+@keyframes ob-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes pie-sweep { from { stroke-dashoffset: var(--c); } to { stroke-dashoffset: 0; } }
+@keyframes o-fade { from { opacity: 0; } to { opacity: 1; } }
+.others-chart .ob { animation: ob-grow 1s cubic-bezier(.2, .7, .3, 1) both; animation-play-state: paused; }
+.others-chart .sweep { animation: pie-sweep 1s ease-out both; animation-play-state: paused; }
+.others-chart .fadein { animation: o-fade .4s ease-out .75s both; animation-play-state: paused; }
+/* 棒グラフの件数: 定位置で、ふわっと出る。棒が、ほぼ伸び切る(約0.5秒)ころに出始めて、約0.75秒で出そろう */
+.others-chart .ob-num { animation: o-fade .3s ease-out .6s both; animation-play-state: paused; }
+.others-chart.go .ob, .others-chart.go .ob-num, .others-chart.go .sweep, .others-chart.go .fadein { animation-play-state: running; }
+
 /* 点数のセルは、クリックすると採点結果画面が開く */
 .score-cell-pc[data-sid], .score-cell[data-sid] { cursor: pointer; }
 </style>
 """
 
-csv_path = get_latest_csv()
+# 表のデータ: dataset/history.jsonl (公式APIから自動更新される保管庫) を優先して読む。無いときだけ、従来のCSVを読む
+HISTORY_JSONL = Path(__file__).resolve().parent / "dataset" / "history.jsonl"
 
-if csv_path is None:
-    st.error("CSVが見つかりません: " + str(BACKUP_DIR))
-    st.stop()
+@st.cache_data(show_spinner=False)
+def load_raw_from_jsonl(path_str, mtime_ns):
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
+    from table_data import load_table_df
+    return load_table_df(path_str)
 
-raw = read_csv_safely(csv_path)
+if HISTORY_JSONL.exists():
+    raw = load_raw_from_jsonl(str(HISTORY_JSONL), HISTORY_JSONL.stat().st_mtime_ns)
+else:
+    csv_path = get_latest_csv()
+    if csv_path is None:
+        st.error("データが見つかりません: " + str(HISTORY_JSONL) + " / " + str(BACKUP_DIR))
+        st.stop()
+    raw = read_csv_safely(csv_path)
 df = normalize(raw)
 
 mode = get_query_param("mode") or "history"
@@ -1074,39 +1110,37 @@ else:
 
 active_hist = "active" if mode == "history" else ""
 active_best = "active" if mode == "best" else ""
+active_others = "active" if mode == "others" else ""
 search_checked = 'checked="checked"' if keyword else ""
 
 iframe_srcdoc = get_search_iframe_srcdoc(keyword)
 
 nav_tab_hist = anchor("?mode=history", "歌唱履歴", cls=active_hist)
 nav_tab_best = anchor("?mode=best", "曲別最高点", cls=active_best)
-nav_tab_other = anchor("#", "その他集計")
+nav_tab_other = anchor("?mode=others", "その他集計", cls=active_others)
 
 sp_tab_hist = anchor("?mode=history", "歌唱履歴", cls=active_hist)
 sp_tab_best = anchor("?mode=best", "曲別最高点", cls=active_best)
-sp_tab_other = anchor("#", "その他集計")
+sp_tab_other = anchor("?mode=others", "その他集計", cls=active_others)
 
 search_svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>'
 menu_svg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>'
 
+show_search = mode != "others"          # 「その他集計」には、検索する対象が無いので、検索欄(PC・スマホとも)を出さない
 nav_html = (
     '<div class="custom-nav">'
     + '<div class="nav-brand">精密集計DX-G</div>'
     + '<div class="nav-tabs">'
-    +   '<div class="pc-search-form">'
-    +     '<iframe srcdoc="' + iframe_srcdoc + '" style="width: 220px; height: 32px; border: none; overflow: hidden;" scrolling="no" frameborder="0"></iframe>'
-    +   '</div>'
+    +   ('<div class="pc-search-form"><iframe srcdoc="' + iframe_srcdoc + '" style="width: 220px; height: 32px; border: none; overflow: hidden;" scrolling="no" frameborder="0"></iframe></div>' if show_search else '')
     +   nav_tab_hist + nav_tab_best + nav_tab_other
     + '</div>'
     + '<div class="nav-sp-icons">'
-    +   '<label for="search-toggle" class="icon-label" style="display:flex; align-items:center; padding: 6px 8px;">' + search_svg + '</label>'
+    +   ('<label for="search-toggle" class="icon-label" style="display:flex; align-items:center; padding: 6px 8px;">' + search_svg + '</label>' if show_search else '')
     +   '<label for="menu-toggle" class="icon-label" style="display:flex; align-items:center; padding: 6px 8px;">' + menu_svg + '</label>'
     + '</div>'
     + '</div>'
     + '<input type="checkbox" id="search-toggle" class="hidden-toggle" ' + search_checked + '>'
-    + '<div class="sp-search-bar"><div class="sp-panel"><div class="sp-panel-inner">'
-    +   '<iframe srcdoc="' + iframe_srcdoc + '" style="width: 100%; height: 32px; border: none; overflow: hidden; display: block;" scrolling="no" frameborder="0"></iframe>'
-    + '</div></div></div>'
+    + ('<div class="sp-search-bar"><div class="sp-panel"><div class="sp-panel-inner"><iframe srcdoc="' + iframe_srcdoc + '" style="width: 100%; height: 32px; border: none; overflow: hidden; display: block;" scrolling="no" frameborder="0"></iframe></div></div></div>' if show_search else '')
     + '<input type="checkbox" id="menu-toggle" class="hidden-toggle">'
     + '<div class="sp-dropdown"><div class="sp-panel"><div class="sp-panel-inner">'
     +   sp_tab_hist + sp_tab_best + sp_tab_other
@@ -1139,9 +1173,38 @@ if selected_date: active_filters.append("日付: " + str(selected_date))
 if selected_song and selected_artist: active_filters.append("楽曲: " + str(selected_song))
 if keyword: active_filters.append("検索: " + str(keyword))
 
+def render_others(df_all):
+    """「その他集計」: 最高点別の曲数(積み上げ棒グラフ)と、ビブラートタイプの割合(円グラフ)"""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
+    from others_charts import best_scores_section, pie_section
+
+    d = df_all.dropna(subset=["total_score"]).copy()
+    key = d["request_no"].where(d["request_no"].astype(str).str.len() > 0, d["song_name"] + "\u0001" + d["artist_name"])
+    best = d.loc[d.groupby(key)["total_score"].idxmax()]
+    best_scores = [(float(s), 0.0 if pd.isna(b) else float(b)) for s, b in zip(best["total_score"], best["bonus_score"])]
+
+    recent = d.sort_values("play_dt", ascending=False).head(200)
+    names = {10: "上昇形", 11: "下降形", 12: "縮小形", 13: "拡張形", 14: "ひし形", 0: "ノンビブ形"}
+    labels = recent["vibrato_type_code"].map(lambda c: names.get(int(c), VIBRATO_TYPE_MAP.get(int(c), str(c))) if not pd.isna(c) else "不明")
+    items = list(labels.value_counts().items())
+    TOP_N = 5                                            # 上位5つだけ出して、残りは「その他」にまとめる(小さい扇のラベルで、円が下に押されないように)
+    if len(items) > TOP_N + 1:
+        items = items[:TOP_N] + [("その他", sum(c for _, c in items[TOP_N:]))]
+
+    PIE_R = 135        # PC版の円の半径。棒グラフの高さは、2つの区画の全体の高さ(見出し〜説明文)が、そろうように決める(説明文が、棒グラフは2行・円グラフは1行なので、19pxの差)
+    return (
+        '<div class="others-wrap">'
+        + '<div class="o-pc o-bar">' + best_scores_section(best_scores, body_h=PIE_R * 2 + 20 - 19) + '</div><div class="o-sp">' + best_scores_section(best_scores, W=420, fs=12) + '</div>'
+        + '<div class="o-pc o-pie">' + pie_section(items, W=440, fs=13, r=PIE_R, labels_left=True) + '</div><div class="o-sp">' + pie_section(items) + '</div>'
+        + '</div>'
+    )
+
 # 検索結果が0件のときは表を非表示にし、「該当する曲はありません」を表示。
 # それ以外は案B: header/body の 2テーブル構造で HTML を組み立てる。
-if view.empty:
+if mode == "others":
+    html_string = render_others(normalize(raw))
+elif view.empty:
     empty_msg = '<div class="empty-state">該当する曲はありません</div>'
     html_string = (
         '<div class="dxg-scroll-wrapper">'
@@ -1203,6 +1266,33 @@ st.html(
     mod = await import(base + "detail.js");
     all = (await (await fetch(base + "history.jsonl")).text()).split("\\n").filter(Boolean).map((l) => JSON.parse(l));
   })());
+  // 「その他集計」のグラフ: 画面に見えたら、動きを始める
+  // 動きが終わったら(約2秒後)、区画を、PNG画像に差し替える: 右クリックの「画像を保存」・スマホの長押しで、区画ごとに保存できる (注意: このスクリプトの中に、山かっこ+英字のタグ風の文字を書かない。HTMLの部品と見なされて、スクリプトごと除かれる)
+  const toImage = async (svg) => {
+    try {
+      const vb = svg.viewBox.baseVal, scale = 3;
+      const clone = svg.cloneNode(true);                                  // 大きさを、数値で指定する(幅100%のままだと、画像として読み込むとき、既定の小さな大きさになる)
+      clone.setAttribute("width", String(vb.width)); clone.setAttribute("height", String(vb.height));
+      const xml = new XMLSerializer().serializeToString(clone);
+      const url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml;charset=utf-8" }));
+      const img = new Image(); img.src = url; await img.decode();
+      const MX = 24, MY = 12;                                             // 保存する画像の、周囲の白い余白(左右24px・上下12px。区画の中に、上下の余白が、もともと約6〜10pxあるので、上下は少なめ)。画面の表示では、この余白の分を、負の余白で打ち消して、見た目の大きさを変えない
+      const c = document.createElement("canvas");
+      c.width = Math.round((vb.width + 2 * MX) * scale); c.height = Math.round((vb.height + 2 * MY) * scale);
+      const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, MX * scale, MY * scale, vb.width * scale, vb.height * scale);
+      const png = await new Promise((r) => c.toBlob(r, "image/png"));
+      const out = new Image(); out.className = "others-img"; out.alt = svg.getAttribute("aria-label") || ""; out.src = URL.createObjectURL(png); await out.decode();
+      // 表示の大きさは、割合(%)で指定する: 画面の拡大率(zoom)や、PC・スマホの幅の違いに、左右されない。
+      // 画像の幅 = 元の幅 + 余白 2M なので、元の幅に対する割合で広げ、余白の分だけ、上下左右へ、負の余白で、はみ出させる(見た目の大きさと位置は、変えない)
+      // (縦の余白の割合も、親の「幅」に対する割合になる(CSSの決まり)ので、幅 vb.width を基準にそろえる)
+      out.style.width = ((vb.width + 2 * MX) / vb.width * 100) + "%"; out.style.maxWidth = "none";
+      out.style.marginLeft = (-MX / vb.width * 100) + "%"; out.style.marginTop = (-MY / vb.width * 100) + "%"; out.style.marginBottom = (-MY / vb.width * 100) + "%";
+      svg.replaceWith(out); URL.revokeObjectURL(url);
+    } catch (e) { console.error("others: 画像への差し替えに失敗(SVGのまま表示を続ける)", e); }
+  };
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("go"); io.unobserve(e.target); setTimeout(() => toImage(e.target), 2100); } }), { threshold: 0.3 });
+  const scan = () => document.querySelectorAll(".others-chart:not([data-o])").forEach((el) => { el.dataset.o = "1"; io.observe(el); });
+  new MutationObserver(scan).observe(document.body, { childList: true, subtree: true }); scan();
   document.addEventListener("click", async (e) => {
     const td = e.target.closest && e.target.closest("td[data-sid]");
     if (!td || !td.dataset.sid) return;
