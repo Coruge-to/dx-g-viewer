@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DX-G Viewer</title>
 <link rel="icon" href="data:,">
+<!-- フォントを、ページの最初から先読みする(JS・データの読み込みと並行して、届くようにする)。
+     届く前に描くと、はじめは代わりのフォントで描かれ、届いた瞬間に、タイトルの文字の幅が変わる(縮んで見える) -->
+<link rel="preload" href="fonts/SourceSansVF-Upright.woff2" as="font" type="font/woff2" crossorigin>
 </head>
 <body>
 <div id="app" class="md"></div>

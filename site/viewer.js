@@ -510,12 +510,16 @@ async function main() {
   const style = document.createElement("style");
   style.textContent = await loadText("viewer.css");
   document.head.appendChild(style);
+  // フォント(Source Sans)の読み込みを、ここで始めておき、画面を描く前に、届くのを待つ(最大1.5秒。届かなければ、待たずに描く)。
+  // 届く前に描くと、はじめは代わりのフォントで描かれ、届いた瞬間に、ナビのタイトルの文字の幅が変わる(縮んで見える)
+  const fontReady = Promise.race([document.fonts.load('700 24px "Source Sans"'), new Promise((r) => setTimeout(r, 1500))]).catch(() => {});
   const detailCss = document.createElement("link");
   detailCss.rel = "stylesheet"; detailCss.href = "detail.css" + V;
   document.head.appendChild(detailCss);
 
   const text = await loadText("dataset/history.jsonl");
   const records = text.split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  await fontReady;
 
   if (st.mode === "stats") {
     const { renderOthers, initOthers } = await import("./charts.js" + V);
