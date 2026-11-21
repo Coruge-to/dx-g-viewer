@@ -538,7 +538,9 @@ function attachHover(wrap, img, hot, zoom) {
       const px = g.x0 + g.L + ((i + 0.5) / g.n) * g.pw;
       const Yf = (v) => g.y0 + g.T0 + (1 - (clamp(v, g.yMin, g.yMax) - g.yMin) / (g.yMax - g.yMin)) * g.ph;
       hl.innerHTML = SERIES.map((se) => halo(se.shape, px, Yf(se.get(play)), se.color)).join("");
-      const val = (se) => (se.name === "総合点" ? play.totalPoint : se.name === "素点" ? play.rawPoint : se.get(play));
+      // 総合点・素点は、小数第3位まで出す(保管庫は、末尾の0を省いた形(95.2 など)なので、95.200 にそろえる)
+      const p3 = (v) => (Number.isFinite(Number(v)) && String(v).trim() !== "" ? Number(v).toFixed(3) : String(v));
+      const val = (se) => (se.name === "総合点" ? p3(play.totalPoint) : se.name === "素点" ? p3(play.rawPoint) : se.get(play));
       return show(`<div class="t">${esc(md(play.scoringDateTime))}</div>` + SERIES.map((se) => row(se.name, se.color, val(se))).join(""), SERIES[0].color, px, g.y0 + g.T0 + g.ph * 0.45);
     }
     hide();
