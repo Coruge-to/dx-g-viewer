@@ -28,12 +28,20 @@ function f(v) {
   return Number(v).toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function section(W, title, body, bodyH, notes, bodyTop = 0.0, centerNotes = false) {
+// crop: { top, bottom }。区画(SVG)の内側の余白を、外側の端だけ、切る(静的サイトで追加)。
+//   top: 見出しの帯の上端(y=6)まで切る。bottom: 最後の説明文の下端まで切る。
+//   ナビの灰色線〜中身、最後の説明文〜ページの下端の余白を、歌唱履歴の表と同じ12pxにそろえるため(CSS側で、その12pxを置く。viewer.css の末尾)。
+//   区画と区画の間(スマホ版で、縦に並ぶ2つの間)の余白は、切らない。
+const BAR_TOP = 6;                // 見出しの帯の上端
+const NOTE_DESC = 3.1;            // 説明文(13px)の、基準線より下の部分(文字枠の下端)
+function section(W, title, body, bodyH, notes, bodyTop = 0.0, centerNotes = false, crop = {}) {
   const shift = TITLE_H - bodyTop;
   const notesY = TITLE_H + (bodyH - bodyTop) + 14;
   const H = notesY + NOTE_LH * notes.length + 6;
+  const y0 = crop.top ? BAR_TOP : 0;
+  const yEnd = crop.bottom && notes.length ? notesY + NOTE_LH * (notes.length - 1) + 13 + NOTE_DESC : H;
   const o = [
-    `<svg class="others-chart" viewBox="0 0 ${W} ${f(H)}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="${FONT}" font-weight="bold" role="img" aria-label="${escape(title)}">`,
+    `<svg class="others-chart" viewBox="0 ${y0} ${W} ${f(yEnd - y0)}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="${FONT}" font-weight="bold" role="img" aria-label="${escape(title)}">`,
     `<rect width="${W}" height="${f(H)}" fill="#fff"/>`,
     '<rect x="0" y="6" width="4" height="26" fill="#6f6fd8"/>',
     `<text x="14" y="25" font-size="16" fill="#333">${escape(title)}</text>`,
@@ -52,7 +60,7 @@ function section(W, title, body, bodyH, notes, bodyTop = 0.0, centerNotes = fals
 
 /** 最高点別の曲数(積み上げ棒グラフ)。bestScores: 曲ごとの [最高点, その記録のボーナス点]。
  *  列は、lo〜99, 100, 100+ の12列を固定で出す(該当する曲が0でも、列は残して「0」と出す) */
-export function bestScoresSection(bestScores, { lo = 90, W = 440, fs = 11, bodyH = null, centerNotes = false } = {}) {
+export function bestScoresSection(bestScores, { lo = 90, W = 440, fs = 11, bodyH = null, centerNotes = false, crop = {} } = {}) {
   const cats = [];
   for (let n = lo; n < 100; n++) cats.push(String(n));
   cats.push("100", "100+");
@@ -109,7 +117,7 @@ export function bestScoresSection(bestScores, { lo = 90, W = 440, fs = 11, bodyH
     o.push(`<text x="${f(x + 15)}" y="${f(yb - 1 + fs * 0.36)}" font-size="${fs}" fill="#333">${escape(lab)}</text>`);
     x += lw[k] + 14;
   });
-  return section(W, "最高点別の曲数", o.join(""), H, ["最高点が何点の曲が何曲あるかを表しています", "ボーナス点が0点の100点を「100+」と表します"], 0.0, centerNotes);
+  return section(W, "最高点別の曲数", o.join(""), H, ["最高点が何点の曲が何曲あるかを表しています", "ボーナス点が0点の100点を「100+」と表します"], 0.0, centerNotes, crop);
 }
 
 /** 太字の文字列の、おおよその幅(単位は、描画の座標)。半角は文字ごとの係数、全角は fs */
@@ -206,7 +214,7 @@ function leftLabels(pts, cx, cy, r, fs, bottomY, xLab, fan = false) {
 }
 
 /** ビブラートタイプの割合(円グラフ)。items: [[表示名, 件数], ...] (多い順)。割合の表示は小数1桁 */
-export function pieSection(items, { W = 420, fs = 12, r = null, labelsLeft = false, bodyH = null, centerNotes = false, fan = false } = {}) {
+export function pieSection(items, { W = 420, fs = 12, r = null, labelsLeft = false, bodyH = null, centerNotes = false, fan = false, crop = {} } = {}) {
   const total = items.reduce((a, [, c]) => a + c, 0) || 1;
   const wide = W >= 450;
   let H, cx, cy, xLab;
@@ -248,7 +256,7 @@ export function pieSection(items, { W = 420, fs = 12, r = null, labelsLeft = fal
   if (labelsLeft) {
     o.push(...leftLabels(pts, cx, cy, r, fs, cy + r, xLab, fan));
     o.push("</g>");
-    return section(W, "ビブラートタイプ", o.join(""), H, ["直近200曲の上位5つとその他の割合を表しています"], 0.0, centerNotes);
+    return section(W, "ビブラートタイプ", o.join(""), H, ["直近200曲の上位5つとその他の割合を表しています"], 0.0, centerNotes, crop);
   }
   // ラベルの置き方: 円の右側(時計回りで下半分に入る扇)は、扇の外側にそのまま置く。
   // 円の上端に集まる小さい扇(左上〜真上)のラベルは、円の左側に、縦に並べる。
@@ -280,7 +288,7 @@ export function pieSection(items, { W = 420, fs = 12, r = null, labelsLeft = fal
   const top = Math.min(cy - r, ...ys.map((y) => y - fs));   // ラベルが、円の上へはみ出した分だけ、領域を広げる(通常は、ほぼ0)
   const bottom = Math.max(cy + r, ...ys.map((y) => y + fs));
   H = bottom + 8;
-  return section(W, "ビブラートタイプ", o.join(""), H, ["直近200曲の上位5つとその他の割合を表しています"], Math.min(top, 0.0));
+  return section(W, "ビブラートタイプ", o.join(""), H, ["直近200曲の上位5つとその他の割合を表しています"], Math.min(top, 0.0), false, crop);
 }
 
 // ---------- 「その他集計」の画面(app.py の render_others) ----------
@@ -316,8 +324,9 @@ export function renderOthers(rows) {
   const PIE_W = pieMinWidth(items, 13, SEC_BODY_H);      // 円グラフの区画は、ラベルの長さにぴったり合わせた幅
   return (
     '<div class="others-wrap">'
-    + '<div class="o-pc o-bar" style="flex: ' + BAR_W + ' 1 0">' + bestScoresSection(bestScores, { W: BAR_W, fs: 12, bodyH: SEC_BODY_H, centerNotes: true }) + '</div><div class="o-sp">' + bestScoresSection(bestScores, { W: 420, fs: 12 }) + "</div>"
-    + '<div class="o-pc o-pie" style="flex: ' + PIE_W + ' 1 0">' + pieSection(items, { W: PIE_W, fs: 13, labelsLeft: true, bodyH: SEC_BODY_H, centerNotes: true, fan: true }) + '</div><div class="o-sp">' + pieSection(items) + "</div>"
+    // 余白: PC版は、2つの区画が横に並ぶので、どちらも、上と下の両方を切る。スマホ版は、縦に並ぶので、棒グラフは上だけ、円グラフは下だけを切る(間の余白は、そのまま)
+    + '<div class="o-pc o-bar" style="flex: ' + BAR_W + ' 1 0">' + bestScoresSection(bestScores, { W: BAR_W, fs: 12, bodyH: SEC_BODY_H, centerNotes: true, crop: { top: true, bottom: true } }) + '</div><div class="o-sp">' + bestScoresSection(bestScores, { W: 420, fs: 12, crop: { top: true } }) + "</div>"
+    + '<div class="o-pc o-pie" style="flex: ' + PIE_W + ' 1 0">' + pieSection(items, { W: PIE_W, fs: 13, labelsLeft: true, bodyH: SEC_BODY_H, centerNotes: true, fan: true, crop: { top: true, bottom: true } }) + '</div><div class="o-sp">' + pieSection(items, { crop: { bottom: true } }) + "</div>"
     + "</div>"
   );
 }
