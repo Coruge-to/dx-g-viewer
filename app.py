@@ -1041,9 +1041,9 @@ section.main > div.block-container,
 .pc-body-table tr:hover td:not(.score-cell-pc) { background-color: #eee; }
 
 /* 「その他集計」(?mode=others): 中央の1列に、グラフを縦に並べる。PC版は、表と同じ倍率で拡大する */
-.others-wrap { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 0 14px; max-width: 960px; margin: 0 auto; padding: 4px 8px 24px; zoom: var(--tbl-zoom); }   /* PC版: 2つの区画を、横に並べる(幅が足りないときは、縦に折り返す) */
+.others-wrap { display: flex; align-items: flex-start; gap: 0 28px; width: 100%; max-width: var(--tbl-layout-w); margin: 0 auto; padding: 4px 0 24px; zoom: var(--tbl-zoom); }   /* PC版: ナビの灰色の線と同じ長さ(表やナビと同じ最大幅・同じ倍率)に、2つの区画を、横に並べる */
 .others-wrap > div { margin: 0 0 14px; }                         /* 区画の下の余白 */
-.o-bar { width: 440px; } .o-pie { width: 440px; }
+.o-bar, .o-pie { min-width: 0; }   /* 幅の比は、2つの区画の描画幅の比と同じ(各区画の style に flex で指定)。間の余白(36px)を除いた幅を、この比で分けるので、2つの区画は、常に、同じ倍率で拡大・縮小され、高さがそろう */
 .others-wrap svg { display: block; }
 .others-img { display: block; width: 100%; height: auto; -webkit-touch-callout: default; }   /* 動きのあとに、区画の画像(右クリック・長押しで保存できる)に差し替える */
 /* 画面の幅で、PC用(幅576)とスマホ用(幅420)を切り替える (表の .view-pc/.view-sp は、下に40pxの余白が付くので、使わない) */
@@ -1058,7 +1058,8 @@ section.main > div.block-container,
 @keyframes o-fade { from { opacity: 0; } to { opacity: 1; } }
 .others-chart .ob { animation: ob-grow 1s cubic-bezier(.2, .7, .3, 1) both; animation-play-state: paused; }
 .others-chart .sweep { animation: pie-sweep 1s ease-out both; animation-play-state: paused; }
-.others-chart .fadein { animation: o-fade .4s ease-out .75s both; animation-play-state: paused; }
+/* 棒グラフの件数と、円グラフのラベルは、同じタイミング(0.6秒後から、0.3秒かけて。棒グラフの件数のタイミングが基準)で出す */
+.others-chart .fadein { animation: o-fade .3s ease-out .6s both; animation-play-state: paused; }
 /* 棒グラフの件数: 定位置で、ふわっと出る。棒が、ほぼ伸び切る(約0.5秒)ころに出始めて、約0.75秒で出そろう */
 .others-chart .ob-num { animation: o-fade .3s ease-out .6s both; animation-play-state: paused; }
 .others-chart.go .ob, .others-chart.go .ob-num, .others-chart.go .sweep, .others-chart.go .fadein { animation-play-state: running; }
@@ -1177,7 +1178,7 @@ def render_others(df_all):
     """「その他集計」: 最高点別の曲数(積み上げ棒グラフ)と、ビブラートタイプの割合(円グラフ)"""
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
-    from others_charts import best_scores_section, pie_section
+    from others_charts import best_scores_section, pie_min_width, pie_section
 
     d = df_all.dropna(subset=["total_score"]).copy()
     key = d["request_no"].where(d["request_no"].astype(str).str.len() > 0, d["song_name"] + "\u0001" + d["artist_name"])
@@ -1192,11 +1193,13 @@ def render_others(df_all):
     if len(items) > TOP_N + 1:
         items = items[:TOP_N] + [("その他", sum(c for _, c in items[TOP_N:]))]
 
-    PIE_R = 135        # PC版の円の半径。棒グラフの高さは、2つの区画の全体の高さ(見出し〜説明文)が、そろうように決める(説明文が、棒グラフは2行・円グラフは1行なので、19pxの差)
+    SEC_BODY_H = 340   # PC版: 2つの区画の「グラフ本体」の高さ(同じにする→先頭の説明文の位置が、そろう)
+    BAR_W = 551
+    PIE_W = pie_min_width(items, 13, SEC_BODY_H)   # 円グラフの区画は、ラベルの長さにぴったり合わせた幅(左に余白を残さない)。浮いた幅の分、2つの区画が、より大きく拡大される
     return (
         '<div class="others-wrap">'
-        + '<div class="o-pc o-bar">' + best_scores_section(best_scores, body_h=PIE_R * 2 + 20 - 19) + '</div><div class="o-sp">' + best_scores_section(best_scores, W=420, fs=12) + '</div>'
-        + '<div class="o-pc o-pie">' + pie_section(items, W=440, fs=13, r=PIE_R, labels_left=True) + '</div><div class="o-sp">' + pie_section(items) + '</div>'
+        + '<div class="o-pc o-bar" style="flex: ' + str(BAR_W) + ' 1 0">' + best_scores_section(best_scores, W=BAR_W, fs=12, body_h=SEC_BODY_H, center_notes=True) + '</div><div class="o-sp">' + best_scores_section(best_scores, W=420, fs=12) + '</div>'
+        + '<div class="o-pc o-pie" style="flex: ' + str(PIE_W) + ' 1 0">' + pie_section(items, W=PIE_W, fs=13, labels_left=True, body_h=SEC_BODY_H, center_notes=True) + '</div><div class="o-sp">' + pie_section(items) + '</div>'
         + '</div>'
     )
 
