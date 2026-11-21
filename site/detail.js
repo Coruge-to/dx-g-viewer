@@ -543,9 +543,14 @@ function attachHover(wrap, img, hot, zoom) {
     }
     hide();
   };
-  img.addEventListener("pointermove", onMove);
-  img.addEventListener("pointerdown", onMove);
-  img.addEventListener("pointerleave", hide);
+  // マウス: 乗せている間だけ表示する(離れたら消える)。
+  // 指(タッチ): ホバーが無いので、タップで表示して、そのまま残す。グラフの外(表示範囲外)をタップしたら消える。
+  //   (指を離すと、すぐ「ポインタが離れた」(pointerleave)が来るので、それで消さない。消すのは、範囲外のタップだけ)
+  //   画像の外(暗い背景)をタップすると、採点結果画面そのものが閉じる(従来どおり)。
+  const isTouch = (e) => e.pointerType === "touch";
+  img.addEventListener("pointermove", (e) => { if (!isTouch(e)) onMove(e); });
+  img.addEventListener("pointerdown", onMove);                       // マウスのクリックと、指のタップの両方
+  img.addEventListener("pointerleave", (e) => { if (!isTouch(e)) hide(); });
 }
 
 // 動く部分(data-a)を含む入れ物と、定義(defs・clipPath)だけを残し、残りの要素を取り除く。
