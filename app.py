@@ -177,6 +177,7 @@ def normalize(df):
         "bonus_point": pick_col(df, ["ボーナスポイント", "bonusPoint"]),
         "longtone": pick_col(df, ["ロングトーンスキル", "longtoneSkill"]),
         "timing": pick_col(df, ["リズムタイミング", "timing"]),
+        "score_id": pick_col(df, ["採点ID", "scoringDxgId"]),
     }
 
     if col["datetime"]:
@@ -188,6 +189,7 @@ def normalize(df):
         out["play_dt"] = pd.NaT
         out["play_date"] = ""
 
+    out["score_id"] = df[col["score_id"]].astype(str).str.replace(r"\.0$", "", regex=True) if col["score_id"] else ""
     out["song_name"] = df[col["song"]].astype(str) if col["song"] else ""
     out["artist_name"] = df[col["artist"]].astype(str) if col["artist"] else ""
 
@@ -263,7 +265,7 @@ def get_search_iframe_srcdoc(keyword):
         width: 100%; height: 32px; 
         /* 上下の余白を非対称にして、文字(プレースホルダー)を約1.5px下げる。
            そのままだと日本語フォントの字面が枠の中心より約1.4px上に見えるため */
-        padding: 8px 12px 5px 30px;
+        padding: 7px 12px 6px 30px;
         border: 1px solid #ccc;
         border-radius: 4px; color: #333; font-size: 14px; outline: none; box-sizing: border-box;
         background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="%23888888" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>');
@@ -375,7 +377,7 @@ def render_sp_body(df, sort_col, sort_dir, date, song, artist, mode, search):
                 +     date_link
                 +   '</div>'
                 + '</td>'
-                + '<td rowspan="3" class="score-cell" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
+                + '<td rowspan="3" class="score-cell" data-sid="' + esc(r["score_id"]) + '" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
                 + '<td>' + num_slot(fmt(r["base_score"], 3), SP_NUM_SLOT_WIDTH["base_score"]) + '</td>'
                 + '<td>' + num_slot(fmt(r["chart_total"]), SP_NUM_SLOT_WIDTH["chart_total"]) + '</td>'
                 + '<td>' + num_slot(fmt(r["pitch"]), SP_NUM_SLOT_WIDTH["pitch"]) + '</td>'
@@ -487,7 +489,7 @@ def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search):
                 + '<td>' + str(i+1) + '</td>'
                 + '<td>' + date_link + '</td>'
                 + '<td class="meta-cell-pc pc-txt-cell">' + song_link + ' <span class="artist-pc">/ ' + esc(a_val) + '</span></td>'
-                + '<td class="score-cell-pc" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
+                + '<td class="score-cell-pc" data-sid="' + esc(r["score_id"]) + '" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
                 + td_num("base_score", fmt(r["base_score"], 3))
                 + td_num("bonus_score", fmt(r["bonus_score"], 3))
                 + '<td>' + esc(r["bonus_type_short"]) + '</td>'
@@ -632,7 +634,7 @@ section.main > div.block-container,
   display: inline-flex; align-items: center;
   box-sizing: border-box;
   color: #555 !important; text-decoration: none !important;
-  font-weight: bold; border-radius: 0 !important;
+  font-weight: bold; border-radius: 4px !important; transition: background .15s;
 }
 .nav-tabs a:hover { background: #f0f0f0; }
 .nav-tabs a.active { color: #1666aa !important; }
@@ -648,12 +650,26 @@ section.main > div.block-container,
 .icon-label:active { background: #eee; }
 .hidden-toggle { display: none; }
 
-.sp-search-bar { display: none; padding: 10px; border-bottom: 1px solid #ddd; margin-bottom: 15px; }
-#search-toggle:checked ~ .sp-search-bar { display: block; }
-
-.sp-dropdown { display: none; flex-direction: column; border-bottom: 1px solid #ddd; margin-bottom: 15px; }
+/* スマホ版のメニュー(三本線)と検索欄: 上から順にあらわれて開き、閉じるときは上へ消える(約0.35秒。元サイトの動きを動画から測った値)。
+   表を押し下げず、表の上に重ねて、clip-path で上から切り抜きを広げる。表の位置の計算(約5万個の要素)が、毎フレーム、いらなくなり、
+   スマホ相当の遅いCPUでも、約60fpsで動く(押し下げる方式は、1枚あたり約200ミリ秒かかっていた)。
+   閉じている間は visibility:hidden で、リンクにフォーカスも当たらない。 */
+.sp-search-bar, .sp-dropdown {
+  position: sticky; z-index: 350; display: block; height: 0; visibility: hidden;      /* ナビ(z-index 300)より前に出して、ナビの下の白い帯の上にも重ねる */
+  transition: visibility 0s linear .5s;
+}
+#search-toggle:checked ~ .sp-search-bar, #menu-toggle:checked ~ .sp-dropdown {
+  visibility: visible; transition: visibility 0s linear 0s;
+}
+/* 上端は、ナビの灰色の線のすぐ下(ナビの下の白い帯 12px の分、上へ寄せる)から始める。下端は、白い余白なしで、表に、そのまま接する */
+.sp-panel { position: absolute; left: 0; right: 0; top: -12px; clip-path: inset(0 0 100% 0); transition: clip-path .5s ease, top .5s ease; }
+#search-toggle:checked ~ .sp-search-bar .sp-panel, #menu-toggle:checked ~ .sp-dropdown .sp-panel { clip-path: inset(0 0 -20px 0); }
+/* 検索欄とメニューが、同時に開いているときは、メニューを、検索欄(高さ53px)のすぐ下に、隙間なく続けて出す */
+#search-toggle:checked ~ #menu-toggle ~ .sp-dropdown .sp-panel { top: 41px; }
+.sp-panel-inner { background: #f8f8f8; border-bottom: 1px solid #ddd; }
+.sp-search-bar .sp-panel-inner { padding: 10px; }
+.sp-dropdown .sp-panel-inner { display: flex; flex-direction: column; }
 .sp-dropdown a { padding: 12px; border-bottom: 1px solid #eee; color: #333 !important; text-decoration: none !important; font-weight: bold;}
-#menu-toggle:checked ~ .sp-dropdown { display: flex; }
 
 .view-pc, .view-sp {
   padding-bottom: 40px;
@@ -1017,6 +1033,13 @@ section.main > div.block-container,
     padding: 30px 10px !important;
   }
 }
+
+/* PC版: 表の行にマウスを乗せたとき、色のついていない部分を、薄い灰色(#eee)にする。点数のセル(色つき)は、そのまま。
+   元サイトの `tbody:hover { background-color: #eee }` と同じ見え方。 */
+.pc-body-table tr:hover td:not(.score-cell-pc) { background-color: #eee; }
+
+/* 点数のセルは、クリックすると採点結果画面が開く */
+.score-cell-pc[data-sid], .score-cell[data-sid] { cursor: pointer; }
 </style>
 """
 
@@ -1081,13 +1104,13 @@ nav_html = (
     + '</div>'
     + '</div>'
     + '<input type="checkbox" id="search-toggle" class="hidden-toggle" ' + search_checked + '>'
-    + '<div class="sp-search-bar">'
-    +   '<iframe srcdoc="' + iframe_srcdoc + '" style="width: 100%; height: 32px; border: none; overflow: hidden;" scrolling="no" frameborder="0"></iframe>'
-    + '</div>'
+    + '<div class="sp-search-bar"><div class="sp-panel"><div class="sp-panel-inner">'
+    +   '<iframe srcdoc="' + iframe_srcdoc + '" style="width: 100%; height: 32px; border: none; overflow: hidden; display: block;" scrolling="no" frameborder="0"></iframe>'
+    + '</div></div></div>'
     + '<input type="checkbox" id="menu-toggle" class="hidden-toggle">'
-    + '<div class="sp-dropdown">'
+    + '<div class="sp-dropdown"><div class="sp-panel"><div class="sp-panel-inner">'
     +   sp_tab_hist + sp_tab_best + sp_tab_other
-    + '</div>'
+    + '</div></div></div>'
 )
 
 view = df.copy()
@@ -1142,3 +1165,53 @@ else:
 combined = DXG_CSS + nav_html + html_string
 clean_html = "\n".join([line.strip() for line in combined.split("\n")])
 st.markdown(clean_html, unsafe_allow_html=True)
+
+# ---------- 採点結果画面 (点数をクリックで開く) ----------
+# site/ の部品(detail.js など)と dataset/history.jsonl を、Streamlitの静的配信フォルダ(static/)に置き、
+# ページ側のスクリプトから読み込む。static/ は、起動のたびに作り直すコピーなので、Git管理外。
+def sync_static_detail():
+    """部品を、版つきのフォルダ(static/dxgdetail/<版>/)にコピーして、その版を返す。
+    ファイルが変わると、版(= 更新時刻の最大値)が変わり、配信アドレスも変わる。ブラウザが古いファイルを使い続けない(スマホのキャッシュ対策)。"""
+    import shutil
+    root = Path(__file__).resolve().parent
+    base = root / "static" / "dxgdetail"
+    srcs = [p for p in (root / "site").glob("*") if p.suffix in (".js", ".css")]
+    srcs.append(root / "dataset" / "history.jsonl")
+    srcs = [p for p in srcs if p.exists()]
+    ver = format(max(p.stat().st_mtime_ns for p in srcs) // 1_000_000, "x")
+    dst = base / ver
+    if not dst.exists():
+        dst.mkdir(parents=True, exist_ok=True)
+        for p in srcs:
+            (dst / p.name).write_bytes(p.read_bytes())
+        olds = sorted([d for d in base.iterdir() if d.is_dir() and d.name != ver], key=lambda d: d.stat().st_mtime, reverse=True)
+        for d in olds[1:]:                              # 古い版のフォルダは片づける(直近の1つだけ残す)
+            shutil.rmtree(d, ignore_errors=True)
+    return ver
+
+_static_ver = sync_static_detail()
+st.html(
+    """
+<script>
+(function () {
+  if (window.__dxgDetailInit) return;
+  window.__dxgDetailInit = true;
+  const base = "/app/static/dxgdetail/__VER__/";
+  const link = document.createElement("link"); link.rel = "stylesheet"; link.href = base + "detail.css"; document.head.appendChild(link);
+  let mod = null, all = null, loading = null;
+  const load = () => loading || (loading = (async () => {
+    mod = await import(base + "detail.js");
+    all = (await (await fetch(base + "history.jsonl")).text()).split("\\n").filter(Boolean).map((l) => JSON.parse(l));
+  })());
+  document.addEventListener("click", async (e) => {
+    const td = e.target.closest && e.target.closest("td[data-sid]");
+    if (!td || !td.dataset.sid) return;
+    await load();
+    const rec = all.find((r) => r.scoringDxgId === td.dataset.sid);
+    if (rec) mod.openDetail(rec, all);
+  });
+})();
+</script>
+""".replace("__VER__", _static_ver),
+    unsafe_allow_javascript=True,
+)

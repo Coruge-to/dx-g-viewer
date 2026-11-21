@@ -260,10 +260,16 @@ function vibratoSVG(type, p, x0, y0) {
   let wave;
   if (g) {
     const sx = (BW - 1.2) / g.w, sy = (BH - 1.2) / g.h, n2 = (v) => v.toFixed(2).replace(/\.?0+$/, "");
-    let d = "";
-    for (let i = 0; i < g.p.length; i += 2) d += `${i ? "L" : "M"}${n2(0.6 + g.p[i] * sx)} ${n2(0.6 + g.p[i + 1] * sy - WAVE_DY)}`;
-    // 波の線は、枠の線(中心線)の内側で切り抜く: 山の頂上が枠の上端に触れても、線の端が、枠の外へはみ出さない
-    wave = `<clipPath id="${p}vc2"><rect x="1.2" y="1.2" width="${BW - 2.4}" height="${BH - 2.4}"/></clipPath><path d="${d}" fill="none" stroke="#00ff00" stroke-width="2.2" stroke-linejoin="round" clip-path="url(#${p}vc2)"/>`;
+    const P = [];                                     // 点列を0.5px間隔に間引き、点と点の間は、なめらかな曲線(Catmull-Rom→3次ベジェ)でつなぐ
+    for (let i = 0; i < g.p.length; i += 4) P.push([0.6 + g.p[i] * sx, 0.6 + g.p[i + 1] * sy - WAVE_DY]);
+    if ((g.p.length / 2 - 1) % 2) P.push([0.6 + g.p[g.p.length - 2] * sx, 0.6 + g.p[g.p.length - 1] * sy - WAVE_DY]);
+    let d = `M${n2(P[0][0])} ${n2(P[0][1])}`;
+    for (let i = 0; i < P.length - 1; i++) {
+      const a = P[Math.max(i - 1, 0)], b = P[i], c = P[i + 1], e = P[Math.min(i + 2, P.length - 1)];
+      d += `C${n2(b[0] + (c[0] - a[0]) / 6)} ${n2(b[1] + (c[1] - a[1]) / 6)} ${n2(c[0] - (e[0] - b[0]) / 6)} ${n2(c[1] - (e[1] - b[1]) / 6)} ${n2(c[0])} ${n2(c[1])}`;
+    }
+    // 波の線は、枠の内側(角丸も同じ形)で切り抜く: 山の頂上が枠に触れても、線の端が、枠の外や、角の外へはみ出さない
+    wave = `<clipPath id="${p}vc2"><rect x="1.2" y="1.2" width="${BW - 2.4}" height="${BH - 2.4}" rx="3.2"/></clipPath><path d="${d}" fill="none" stroke="#00ff00" stroke-width="2.2" stroke-linejoin="round" clip-path="url(#${p}vc2)"/>`;
   } else {
     const v = ASSETS.vib[VIB_CODE[type] ?? 0], yt = 10, yb = 44.4;                      // 公式画像で、波が届いている範囲(縦)
     const sx = (BW - 1.2) / 95, sy = (BH - 1.2) / (yb - yt);
@@ -413,7 +419,7 @@ export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
     chart = plays.length ? songChartSVG(plays, r.scoringDxgId, 454, 40, 440, 400, p) : "";
     chart += `<rect x="451" y="40" width="2" height="${H - 48}" fill="#1d3ea0"/>`;
   } else {
-    W = 450; H = leftH + 4 + 268 + 6;
+    W = 450; H = leftH + 4 + 268 - 5;   // 下の余白(最後の凡例の文字〜下端)を、上の余白(上端〜タイトル=13.5px)に揃える
     songPos = { x0: 0, y0: leftH + 4 + dy, W: 450, H: 268 };
     chart = sep(p, 10, leftH - 2, 430) + (plays.length ? songChartSVG(plays, r.scoringDxgId, 0, leftH + 4, 450, 268, p) : "");
   }
@@ -530,6 +536,17 @@ function attachHover(wrap, img, hot, zoom) {
   img.addEventListener("pointerleave", hide);
 }
 
+// 動く部分(data-a)を含む入れ物と、定義(defs・clipPath)だけを残し、残りの要素を取り除く。
+// 「全体を隠して、動く部分だけを見せる」CSSの方法は、iPhoneのブラウザ(WebKit)で動かないことがあるので、使わない
+function pruneToAnimated(root) {
+  for (const ch of [...root.children]) {
+    const tag = ch.tagName.toLowerCase();
+    if (tag === "defs" || tag === "clippath" || ch.hasAttribute("data-a")) continue;
+    if (ch.querySelector("[data-a], clipPath")) { pruneToAnimated(ch); continue; }
+    ch.remove();
+  }
+}
+
 // ---------- 開く動き(アニメーション) ----------
 // 元サイトは、点数をクリックした直後に、レーダーが中心から広がり、グラフが左から右へ描かれる。その実測(0.2秒ごとのフレーム)を元にしている。
 //   動き出しの時刻は元サイトに合わせ(レーダー0.10秒・区間グラフ0.07秒・右グラフ0.24秒)、描き終わりは、すべて INTRO.end に揃える。
@@ -541,6 +558,13 @@ function easeTable(tbl, x) {
   if (x <= 0) return 0; if (x >= 1) return 1;
   for (let i = 1; i < tbl.length; i++) if (x <= tbl[i][0]) { const [x0, y0] = tbl[i - 1], [x1, y1] = tbl[i]; return y0 + ((x - x0) / (x1 - x0)) * (y1 - y0); }
   return 1;
+}
+// WebKit(iPhoneのSafari・Chrome)は、clipPath の中身を後から変えても、それを使っている要素を、再描画しないことがある。
+// 切り抜きを使っている側の clip-path 属性を、付け直して、再描画させる。
+function refreshClip(rect) {
+  const cp = rect.parentNode, id = cp.getAttribute("id");
+  const user = cp.ownerSVGElement.querySelector(`[clip-path="url(#${id})"]`);
+  if (user) { user.removeAttribute("clip-path"); user.setAttribute("clip-path", `url(#${id})`); }
 }
 // svgEl: 画面に置いた(インライン)SVG。anim: buildDetailSVG が返す部品の id。cancelled(): 途中で閉じられたかどうか
 function playIntro(svgEl, anim, cancelled) {
@@ -555,12 +579,12 @@ function playIntro(svgEl, anim, cancelled) {
   const total = INTRO.end;
   return new Promise((resolve) => {
     const t0 = performance.now();
-    const tick = (now) => {
+    const tick = () => {
       if (cancelled()) return resolve(false);
-      const t = (now - t0) / 1000;
+      const t = (performance.now() - t0) / 1000;
       setRadar(easeTable(RADAR_EASE, clamp01((t - INTRO.radarStart) / (INTRO.end - INTRO.radarStart))));
-      if (sec) sec.setAttribute("width", String(anim.section.w * clamp01((t - INTRO.sectionStart) / (INTRO.end - INTRO.sectionStart))));
-      if (song) song.setAttribute("width", String(anim.song.w * clamp01((t - INTRO.songStart) / (INTRO.end - INTRO.songStart))));
+      if (sec) { sec.setAttribute("width", String(anim.section.w * clamp01((t - INTRO.sectionStart) / (INTRO.end - INTRO.sectionStart)))); refreshClip(sec); }
+      if (song) { song.setAttribute("width", String(anim.song.w * clamp01((t - INTRO.songStart) / (INTRO.end - INTRO.songStart)))); refreshClip(song); }
       nums.style.opacity = String(clamp01((t - INTRO.numsStart) / INTRO.numsFade));
       if (t >= total) { nums.style.opacity = "1"; return resolve(true); }
       requestAnimationFrame(tick);
@@ -584,8 +608,10 @@ export async function openDetail(record, all, opts = {}) {
   overlay.className = "dd-overlay";
   const wrap = document.createElement("div");
   wrap.className = "dd-wrap";
+  // 右上の「×」ボタン: 画面の部品として、画像の上に重ねる。画像(PNG)には含まれないので、保存した画像には写らない。Escキー、背景のクリック・タップでも閉じられる
   const btn = document.createElement("button");
-  btn.className = "dd-close"; btn.type = "button"; btn.setAttribute("aria-label", "閉じる"); btn.textContent = "×";
+  btn.className = "dd-close"; btn.type = "button"; btn.setAttribute("aria-label", "閉じる");
+  btn.innerHTML = `<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>`;
   btn.addEventListener("click", closeDetail);
   const mkImg = (url, alt) => { const i = new Image(); i.className = "dd-img"; i.alt = alt; i.style.width = px; i.src = url; return i; };
   wrap.append(btn);
@@ -594,7 +620,8 @@ export async function openDetail(record, all, opts = {}) {
   document.addEventListener("keydown", onKey);
   document.body.appendChild(overlay);
   document.body.style.overflow = "hidden";
-  const animate = opts.animate !== false && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  // OSの「視覚効果を減らす」の設定は、無視して、動きを出す(約1秒の短い動き)。設定を尊重したいときは、opts.respectReducedMotion = true
+  const animate = opts.animate !== false && !(opts.respectReducedMotion && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   const fullPromise = svgToPngBlob(svg, width, height, scale);                       // 完成した静止画像 (保存用・最終表示)
   let stage = null;
   if (animate) {
@@ -609,7 +636,8 @@ export async function openDetail(record, all, opts = {}) {
     holder.className = "dd-anim";
     holder.innerHTML = svg;
     const el = holder.firstElementChild;
-    el.removeAttribute("width"); el.removeAttribute("height");
+    pruneToAnimated(el);                                          // 動く部分(data-a)と、その入れ物・定義だけを残す: 背景や文字は、下の静止画像が担当する
+    el.setAttribute("width", String(Math.round(width * zoom))); el.setAttribute("height", String(Math.round(height * zoom)));   // 大きさは、CSSの自動計算に頼らず、数値で指定する(iPhoneのブラウザ対策)
     stage = document.createElement("div");
     stage.className = "dd-stage";
     stage.append(base, holder);

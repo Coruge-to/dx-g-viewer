@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 from scipy.interpolate import UnivariateSpline
 from scipy.ndimage import gaussian_filter
+from scipy.signal import argrelextrema
 from skimage.morphology import skeletonize
 
 SRC, OUT = Path(sys.argv[1]), Path(sys.argv[2])
@@ -38,7 +39,21 @@ for n in NAMES:
     sig = SIGMA + SLOPE_W * RUN
     spl = UnivariateSpline(X, Y, w=1.0 / sig, k=3, s=len(X))
     xs_out = np.arange(X.min(), X.max() + 1e-6, STEP)
-    ys_out = np.clip(spl(xs_out), 0.5, im.height - 0.5)
+    ys_out = spl(xs_out)
+    # 谷と山の先端を、元のGIFの画素に合わせ直す: なめらかな曲線に当てはめると、先端が、位置によって、違う量だけ削れる(谷が、枠の下端に届いたり、届かなかったりする)。
+    # 先端ごとに、元のGIFで、その付近の、いちばん上(山)・いちばん下(谷)の画素の端を求め、線の太さの半分だけ内側を、中心線の先端にする。
+    HALF = 1.1                                       # 描画する線の太さ(2.2)の半分(GIFのpx)
+    for kind, idx in (("peak", argrelextrema(ys_out, np.less, order=6)[0]), ("valley", argrelextrema(ys_out, np.greater, order=6)[0])):
+        for i in idx:
+            x0 = xs_out[i]
+            if x0 < X.min() + 1.2 or x0 > X.max() - 1.2: continue
+            c0, c1 = max(int(np.floor(x0 - 1.5)), 0), min(int(np.ceil(x0 + 1.5)) + 1, im.width)
+            rows = np.where(mask[:, c0:c1].any(axis=1))[0]
+            if not len(rows): continue
+            target = (rows.min() + HALF) if kind == "peak" else (rows.max() + 1 - HALF)
+            delta = float(np.clip(target - ys_out[i], -2.5, 2.5))
+            ys_out = ys_out + delta * np.exp(-0.5 * ((xs_out - x0) / 0.9) ** 2)
+    ys_out = np.clip(ys_out, 0.5, im.height - 0.5)
     pts = []
     for x, y in zip(xs_out, ys_out): pts += [round(float(x), 2), round(float(y), 2)]
     out[n] = {"w": im.width, "h": im.height, "p": pts}

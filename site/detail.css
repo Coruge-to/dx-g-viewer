@@ -3,9 +3,10 @@
   position: fixed; inset: 0; z-index: 1000;
   background: rgba(0, 0, 0, .62);
   display: flex; align-items: flex-start; justify-content: center;
-  overflow-y: auto; padding: 56px 8px 24px;
+  overflow-y: auto; padding: 16px 8px;
 }
-.dd-wrap { position: relative; max-width: 100%; }
+/* 画面(表示領域)の上下中央に置く。margin:auto は、収まるときだけ中央になり、画面より高いときは、上端から始まって、スクロールできる */
+.dd-wrap { position: relative; max-width: 100%; margin: auto; }
 .dd-img {
   display: block; max-width: 100%; height: auto;
   border-radius: 6px; box-shadow: 0 6px 30px rgba(0, 0, 0, .6);
@@ -14,10 +15,15 @@
   user-select: auto;
 }
 .dd-close {
-  position: absolute; top: -34px; right: 0;
-  background: none; border: 0; color: #ddd; font-size: 28px; line-height: 1; cursor: pointer; padding: 2px 8px;
+  position: absolute; top: 8px; right: 8px; z-index: 6;
+  width: 30px; height: 30px; padding: 0; margin: 0; border: 0; border-radius: 50%; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; line-height: 0;   /* 記号を、丸の上下左右の中央に置く(文字の行の高さで、下にずれないように) */
+  min-width: 0; min-height: 0;                                                    /* Streamlit(ページ側)のボタンの既定の大きさに、影響されないように */
+  background: rgba(0, 0, 0, .55); color: #ddd; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.dd-close:hover { color: #fff; }
+.dd-close svg { display: block; width: 20px; height: 20px; flex: 0 0 auto; }
+.dd-close:hover { background: rgba(0, 0, 0, .8); color: #fff; }
 
 /* マウスを乗せたときの吹き出し(元サイトと同じ: 黒い半透明の背景・系列色の縁・系列色のラベル)。大きさは画像の表示倍率(--z)に合わせる */
 .dd-wrap { --z: 1; }
@@ -32,7 +38,5 @@
 
 /* 開く動き: 下の層=静止画像(動かさない部分) / 上の層=動く部分(レーダー・折れ線)だけを見せるSVG */
 .dd-stage { position: relative; }
-.dd-anim { position: absolute; left: 0; top: 0; width: 100%; pointer-events: none; }
-.dd-anim svg { display: block; width: 100%; height: auto; visibility: hidden; }   /* 全体は隠し、 */
-.dd-anim [data-a] { visibility: visible; }                                         /* 動く部分(data-a)だけ見せる */
-.dd-anim clipPath, .dd-anim clipPath * { visibility: visible; }                    /* 切り抜き窓の図形が「見えない」扱いだと、窓が空になり、グラフが全部切り抜かれる */
+.dd-anim { position: absolute; left: 0; top: 0; pointer-events: none; }
+.dd-anim svg { display: block; }   /* 動く部分だけを残したSVG。大きさは、JSで数値(px)指定。「隠して一部だけ見せる」CSSは使わない(iPhoneのブラウザ対策) */
