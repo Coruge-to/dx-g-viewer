@@ -1,0 +1,56 @@
+﻿<!doctype html>
+<html><head><meta charset="utf-8"><title>cmp</title>
+<style>body{margin:0;font:12px monospace} iframe{border:0;display:block;position:absolute;left:0;top:0;visibility:hidden}</style></head>
+<body><pre id="out">running…</pre>
+<script>
+// 試験専用(公開しない。pages.yml が公開するのは site/ と dataset/ の3ファイルだけ)。
+// 準備: tools/copy_static_for_test.ps1 で static/pagestest/ へコピーし、Streamlit(8501)を動かしておく。 開く: http://<このPCのIP>:8501/app/static/pagestest/cmp.html?cases=...
+// Streamlit 版(/?...)と静的版(index.html?...)を、同じ幅のiframeで開き、要素ごとに、位置・大きさ・CSSを突き合わせる。
+// 使い方: cmp.html?cases=<JSON: [[アドレスの条件, 幅], ...]>   例: [["mode=history",1280],["mode=best",390]]
+const CASES = JSON.parse(new URLSearchParams(location.search).get("cases") || '[["mode=history",1280]]');
+const H = 9000;
+const PROPS = ["fontFamily","fontSize","fontWeight","lineHeight","color","backgroundColor","backgroundImage","borderTopWidth","borderRightWidth","borderBottomWidth","borderLeftWidth","borderTopColor","borderRightColor","borderBottomColor","borderLeftColor","borderTopStyle","marginTop","marginRight","marginBottom","marginLeft","paddingTop","paddingRight","paddingBottom","paddingLeft","display","position","textAlign","whiteSpace","textDecorationLine","verticalAlign","letterSpacing","opacity","boxSizing","overflow","textOverflow","zIndex","cursor","flexGrow","flexShrink","zoom","tableLayout","borderCollapse","width","height","transform","strokeWidth","fill","stroke"];
+const SEL = ".custom-nav, .custom-nav *, .sp-search-bar, .sp-search-bar *, .sp-dropdown, .sp-dropdown *, .dxg-scroll-wrapper, .dxg-scroll-wrapper *, .pager, .pager *, .pager-space, .others-wrap, .others-wrap *, .empty-state";
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function mk(src, W) { const f = document.createElement("iframe"); f.style.width = W + "px"; f.style.height = H + "px"; f.src = src; document.body.appendChild(f); return f; }
+async function ready(f, probe) { for (let i = 0; i < 100; i++) { try { const d = f.contentDocument; if (d && d.querySelector(probe) && d.fonts && d.fonts.status === "loaded") return d; } catch (e) {} await sleep(250); } return null; }
+function collect(d) {
+  return [...d.querySelectorAll(SEL)].filter((e) => !e.closest(".tbl-ovl") && !e.closest(".others-ovl")).map((e) => {
+    const cs = d.defaultView.getComputedStyle(e), r = e.getBoundingClientRect();
+    const o = { id: e.tagName.toLowerCase() + (typeof e.className === "string" && e.className ? "." + e.className.trim().split(/\s+/).join(".") : ""), text: (e.children.length === 0 ? e.textContent : "").trim().slice(0, 30), rect: [r.x, r.y, r.width, r.height], st: {} };
+    for (const p of PROPS) o.st[p] = cs[p];
+    return o;
+  });
+}
+async function runCase(Q, W) {
+  const a = mk("/?" + Q, W), b = mk("/app/static/pagestest/index.html?" + Q, W);
+  const probe = Q.includes("mode=others") ? ".others-wrap" : ".dxg-scroll-wrapper, .empty-state";
+  const [da, db] = [await ready(a, probe), await ready(b, probe)];
+  let res;
+  if (!da || !db) res = { q: Q, w: W, error: "ready", streamlit: !!da, static: !!db };
+  else {
+    await sleep(Q.includes("mode=others") ? 3500 : 1200);
+    const A = collect(da), B = collect(db);
+    res = { q: Q, w: W, n: [A.length, B.length], firstStruct: null, structureCount: 0, rect: {}, style: {} };
+    const n = Math.min(A.length, B.length);
+    for (let i = 0; i < n; i++) {
+      const x = A[i], y = B[i];
+      if (x.id !== y.id || x.text !== y.text) { if (!res.firstStruct) res.firstStruct = { i, S: x.id + "|" + x.text, T: y.id + "|" + y.text }; res.structureCount++; continue; }
+      const key = x.id;
+      const dr = x.rect.map((v, k) => Math.abs(v - y.rect[k]));
+      if (Math.max(...dr) > 0.6) { const e = res.rect[key] || (res.rect[key] = { n: 0, ex: null }); e.n++; if (!e.ex) e.ex = { i, S: x.rect.map((v) => Math.round(v * 10) / 10), T: y.rect.map((v) => Math.round(v * 10) / 10) }; }
+      for (const p of PROPS) if (x.st[p] !== y.st[p] && !(p === "position" && /pc-table-wrapper|view-sp/.test(key)) && !/^border\w+Color$/.test(p)) { const k = key + "|" + p; const e = res.style[k] || (res.style[k] = { n: 0, ex: null }); e.n++; if (!e.ex) e.ex = { i, S: String(x.st[p]).slice(0, 40), T: String(y.st[p]).slice(0, 40) }; }
+    }
+    res.rect = Object.entries(res.rect).slice(0, 10).map(([k, v]) => k + " x" + v.n + " S" + JSON.stringify(v.ex.S) + " T" + JSON.stringify(v.ex.T));
+    res.style = Object.entries(res.style).slice(0, 12).map(([k, v]) => k + " x" + v.n + " S=" + v.ex.S + " T=" + v.ex.T);
+    res.ok = !res.firstStruct && !res.rect.length && !res.style.length;
+  }
+  a.remove(); b.remove();
+  return res;
+}
+(async () => {
+  const out = document.getElementById("out"), all = [];
+  for (const [q, w] of CASES) { all.push(await runCase(q, w)); out.textContent = JSON.stringify(all); }
+  out.textContent = JSON.stringify(all); document.title = "done";
+})();
+</script></body></html>

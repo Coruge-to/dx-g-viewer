@@ -53,6 +53,9 @@ PCが起きていて、ログインしている間だけ、動きます。
 | `scripts/others_charts.py` | 「その他集計」のグラフ（SVG）を作る |
 | `site/detail.js`, `detail.css` | 採点結果画面（点数をクリックで開く）。レーダー、折れ線、アニメーション |
 | `site/tablesave.js` | 表（そのページ分）の画像保存 |
+| `site/index.html`, `viewer.js`, `viewer.css`, `charts.js`, `fonts/` | 静的サイト（GitHub Pages）の画面。表（歌唱履歴・曲別最高点）とその他集計を、ブラウザの中で作る（Streamlit版の移植。9章） |
+| `.github/workflows/pages.yml` | GitHub Pages への公開。`site/` の中身と、`dataset/` の3ファイルだけを公開する |
+| `tools/compare_static.html`, `copy_static_for_test.ps1` | 試験用。Streamlit版と静的版を、同じ幅で並べて、全要素を突き合わせる（9章） |
 | `site/assets.js`, `vib_gif.js` | 採点結果画面で使う数字やビブラート波形の図形データ |
 | `tools/` | 上の図形データを作る道具 |
 | `logs/` | 自動更新のログ（Git管理外） |
@@ -263,7 +266,7 @@ known=1001 new=0                              ← 手元の件数と、新しい
 | 画面 | 場所 | 内容 |
 |---|---|---|
 | 歌唱履歴 | `?mode=history` | すべての歌唱。新しい順。日付や曲名のリンクで絞り込み |
-| 曲別最高点 | `?mode=best` | 曲ごとの最高点 |
+| 曲別最高点 | `?mode=best` | 曲ごとの最高点。日付の右に、過去に歌った回数（同じ曲名・歌手名の件数。回数でも並べ替えられる）。歌唱履歴の表には、回数の列は無い |
 | その他集計 | `?mode=others` | 最高点別の曲数（棒グラフ）と、ビブラートタイプの割合（円グラフ。直近200曲） |
 
 PC版は、幅1000px以上で、1300px以上では、拡大して表示します。幅1000px未満が、スマホ版です。
@@ -319,3 +322,60 @@ Playwrightで、Chromium（PC）と、iPhone 13の設定のWebKit（スマホ）
 - 正本（`dxg_backup\snapshot_20261121_...`）の、PCの外へのバックアップ。
 - DAM★ともからのログアウト。
 - （済）「commitは、確認してからpush」にするための、`sync.py` の見直し。`dataset/` だけを変えたコミットに限って、pushするようにしました（3.5）。
+- 静的サイト（GitHub Pages）への移行は、進行中です（9章）。
+
+---
+
+## 9. 静的サイト（GitHub Pages）
+
+PCを起動しておかなくても、スマホから見られるようにするための、移行です。公開アドレスは `https://coruge-to.github.io/dx-g-viewer/` です。
+
+### 9.1 仕組み
+
+```
+dxg-sync（10分おき）が、新しい歌唱を取り込んで、dataset/ をcommit・push
+        ▼
+GitHub Actions（.github/workflows/pages.yml）が、site/ と dataset/ の3ファイルを集めて公開
+        ▼
+ブラウザが、index.html を開き、dataset/history.jsonl（gzipで約485KB）を読んで、画面を作る
+```
+
+- 公開するのは、`site/` の中身と、`dataset/` の3ファイル（`history.jsonl`、`meta.json`、`comment_master.json`）だけです。`app.py` や `scripts/` は、公開しません。
+- 並べ替え・検索・絞り込み・ページ送りは、すべて、ブラウザの中で動きます。条件は、Streamlit版と同じ形のアドレス（`?mode=best&sort_col=...`）で決まります。
+- 公開の範囲は、「Streamlitの表として見える範囲」です。データは、元から、公開リポジトリにあります。
+
+### 9.2 ファイル
+
+| ファイル | 役割 |
+|---|---|
+| `site/viewer.js` | 表の画面。保管庫の1件を、表の1行にして（`toRow`）、PC版・スマホ版の表、ページ送り、ナビを作る。`app.py` の移植 |
+| `site/charts.js` | その他集計のグラフ。`scripts/others_charts.py` と、`app.py` の `render_others` の移植 |
+| `site/viewer.css` | 画面のCSS。先頭が、静的サイト用の土台（Streamlitが、もともと与えていた見た目）で、その下は、`app.py` の `DXG_CSS` と同じ |
+| `site/fonts/` | Streamlitと同じ、Source Sans（SIL OFL） |
+| `site/detail.js` ほか | 採点結果画面、表の画像保存。Streamlit版と同じファイルを、そのまま使う |
+
+CSSは、`<style>` として差し込みます（表の画像保存 `tablesave.js` が、画面の `<style>` から、表の見た目を読み取るため）。
+
+### 9.3 Streamlit版との違い
+
+- 同じ順位（同点・同じタイプなど）の並びは、新しい順で安定します。Streamlit版（pandas）は、規則のない内部の並びでした。
+- 検索は、大文字小文字を区別しない、文字の一致です。Streamlit版は、正規表現として扱っていました。
+- 「その他集計」で、保存用の透明な画像が、右へはみ出して、横スクロールバーが出ていたのを、枠でクリップして直しました（Streamlit版には、まだ残っています）。
+
+### 9.4 見た目が同じことの確かめ方
+
+Streamlit版と静的版を、同じ幅のiframeで並べて、全要素の、位置・大きさ・CSSを突き合わせます。
+
+1. `.\tools\copy_static_for_test.ps1` で、`static/pagestest/` へコピーする（Git管理外）。
+2. Streamlit（8501）を動かして、`http://<PCのIP>:8501/app/static/pagestest/cmp.html?cases=[["mode=history",1280],["mode=best",390]]` を開く（`cases` は、[アドレスの条件, 幅] の一覧を、URLエンコードしたもの）。
+3. 結果は、ページの `#out`（JSON）に出る。`ok: true` なら一致。
+
+2026-11-22の確認結果: 歌唱履歴・曲別最高点・その他集計を、幅390・1000・1280・1500pxで、並べ替え・ページ送り・検索・絞り込みも含めて比べ、同順位の並びの違い以外は、すべて一致しました（約5000要素）。実機のiPhone（Safari・Brave）では、まだ確かめていません。
+
+### 9.5 公開するとき
+
+1. GitHubの設定（Settings → Pages → Source）を「GitHub Actions」にする（済）。
+2. コミットをpushする。`site/` か `dataset/` が変わると、Actionsが、自動で、公開を更新する。
+3. 確認: `https://github.com/Coruge-to/dx-g-viewer/actions` で成功を見て、公開アドレスを開く。
+
+注意: 開発のコミット（`site/` など）は、`sync.py` が、自動では、pushしません（3.5）。手で `git push` します。
