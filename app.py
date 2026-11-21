@@ -1185,15 +1185,15 @@ def render_others(df_all):
     best = d.loc[d.groupby(key)["total_score"].idxmax()]
     best_scores = [(float(s), 0.0 if pd.isna(b) else float(b)) for s, b in zip(best["total_score"], best["bonus_score"])]
 
-    recent = d.sort_values("play_dt", ascending=False).head(200)
     names = {10: "上昇形", 11: "下降形", 12: "縮小形", 13: "拡張形", 14: "ひし形", 0: "ノンビブ形"}
+    recent = d.sort_values("play_dt", ascending=False).head(200)   # ビブラートタイプの割合は、直近200曲から集計する
     labels = recent["vibrato_type_code"].map(lambda c: names.get(int(c), VIBRATO_TYPE_MAP.get(int(c), str(c))) if not pd.isna(c) else "不明")
     items = list(labels.value_counts().items())
     TOP_N = 5                                            # 上位5つだけ出して、残りは「その他」にまとめる(小さい扇のラベルで、円が下に押されないように)
     if len(items) > TOP_N + 1:
         items = items[:TOP_N] + [("その他", sum(c for _, c in items[TOP_N:]))]
 
-    SEC_BODY_H = 340   # PC版: 2つの区画の「グラフ本体」の高さ(同じにする→先頭の説明文の位置が、そろう)
+    SEC_BODY_H = 340   # PC版: 2つの区画の「グラフ本体」の高さ(同じにする→先頭の説明文の位置が、そろう)。説明文は、各区画の左右中央(center_notes=True)。スマホ版は左寄せ
     BAR_W = 551
     PIE_W = pie_min_width(items, 13, SEC_BODY_H)   # 円グラフの区画は、ラベルの長さにぴったり合わせた幅(左に余白を残さない)。浮いた幅の分、2つの区画が、より大きく拡大される
     return (

@@ -17,7 +17,8 @@ PIE_COLORS = ["#7cb5ec", "#434348", "#90ed7d", "#f7a35c", "#8085e9", "#f15c80", 
 FONT = "Arial, 'Yu Gothic', sans-serif"          # 表と同じフォント
 TITLE_H = 40                                      # 見出しの高さ
 LABEL_GAP = 24                                    # PC用の円グラフ: ラベルの右端と、円の左端の間(線を通す幅)
-EDGE = 3                                          # PC用の円グラフ: 区画の左端・円の右端の、余白(狭くてよい)
+EDGE = 8                                          # PC用の円グラフ: 区画の左端〜ラベル、円の右端〜区画の右端、の余白(棒グラフの右の余白 R=8 と同じ)
+FIT = 0.975                                       # ラベルの幅の見積もりの余裕(実測の最長ラベルより約0.2%大きい。余白がずれても、文字が、区画の外へ出て切れないように、少しだけ大きめに見積もる)
 BAR_T, BAR_B = 26, 68                             # 棒グラフの、グラフ本体の上の余白(=一番上の目盛り線の位置)と、下の余白
 AXIS_LABEL_DROP = 18                              # 棒グラフのx軸の文字の下端は、グラフの底(0の線)より、約18px下
 NOTE_LH = 19                                      # 説明文の行の高さ
@@ -126,14 +127,14 @@ def _text_w(s: str, fs: int, margin: float = 1.04) -> float:
 
 
 def _pie_r(body_h: float) -> float:
-    """PC用の円の半径: 円の全体が、棒グラフの「150の線〜0の線」の高さ(グラフ領域)に収まる大きさ"""
+    """PC用の円の半径: 円の上端が棒グラフの「150の線」、下端が「0の線」に、ぴったり合う大きさ(円の直径 = グラフ領域の高さ)"""
     return (body_h - BAR_T - BAR_B) / 2
 
 
 def pie_min_width(items: list[tuple[str, int]], fs: int = 13, body_h: float = 300) -> int:
     """PC用の円グラフ(ラベルを左の1列に並べる)の区画の幅を、ラベルの長さにぴったり合わせた値にする(円の左に、余白を残さない)"""
     total = sum(c for _, c in items) or 1
-    label_w = max(_text_w(f"{name}: {cnt / total * 100:.1f} %", fs) for name, cnt in items) if items else 0
+    label_w = max(_text_w(f"{name}: {cnt / total * 100:.1f} %", fs, FIT) for name, cnt in items) if items else 0
     r = _pie_r(body_h)
     return int(math.ceil(2 * r + LABEL_GAP + 2 * EDGE + label_w))
 
@@ -172,11 +173,10 @@ def pie_section(items: list[tuple[str, int]], W: int = 420, fs: int = 12, r: int
     if labels_left:                                       # PC用: 円を右に寄せ、ラベルを左の1列に並べる
         H = body_h or 300
         r = r or _pie_r(H)                                   # 棒グラフの「150の線〜0の線」の高さに、円の全体が収まる大きさ
-        label_w = max(_text_w(f"{n}: {c_ / total * 100:.1f} %", fs) for n, c_ in items) if items else 0
-        x_left = (W - (label_w + LABEL_GAP + 2 * r)) / 2     # ラベルと円を、ひとかたまりにして、区画の左右中央に置く
-        x_lab = x_left + label_w                             # ラベルの右端
-        # 縦の位置: 見出しの灰色の線(区画の座標で y=-2)と、説明文の先頭行の上端(y=body_h+17)の、ちょうど真ん中に、円の中心を置く
-        cx, cy = x_lab + LABEL_GAP + r, (H + 15) / 2
+        label_w = max(_text_w(f"{n}: {c_ / total * 100:.1f} %", fs, FIT) for n, c_ in items) if items else 0
+        cx = W - EDGE - r                                    # 円は、右の余白(EDGE)をあけて、右に寄せる
+        x_lab = cx - r - LABEL_GAP                           # ラベルの右端(ラベルは、左の余白(EDGE)から始まる幅に収まるよう、区画の幅が決まる)
+        cy = BAR_T + r                                       # 縦の位置: 円の上端が、棒グラフの「150の線」に合う(下端は「0の線」)
     else:
         r = r or (90 if wide else 70)
         cx, cy = W / 2, (110 if wide else r + 28)
@@ -206,7 +206,7 @@ def pie_section(items: list[tuple[str, int]], W: int = 420, fs: int = 12, r: int
     if labels_left:
         o.extend(_left_labels(pts, cx, cy, r, fs, cy + r, x_lab))
         o.append("</g>")
-        return _section(W, "ビブラートタイプ", "".join(o), H, ["上位5つとその他の割合を表しています"], center_notes=center_notes)
+        return _section(W, "ビブラートタイプ", "".join(o), H, ["直近200曲の上位5つとその他の割合を表しています"], center_notes=center_notes)
     # ラベルの置き方: 円の右側(時計回りで下半分に入る扇)は、扇の外側にそのまま置く。
     # 円の上端に集まる小さい扇(左上〜真上)のラベルは、円の左側に、縦に並べる(上へ積み上げると、円の上に空白ができて、高さが増えるため)。
     pitch = fs + 5
@@ -243,4 +243,4 @@ def pie_section(items: list[tuple[str, int]], W: int = 420, fs: int = 12, r: int
     top = min([cy - r] + [y - fs for y in ys])             # ラベルが、円の上へはみ出した分だけ、領域を広げる(通常は、ほぼ0)
     bottom = max([cy + r] + [y + fs for y in ys])
     H = bottom + 8
-    return _section(W, "ビブラートタイプ", "".join(o), H, ["上位5つとその他の割合を表しています"], body_top=min(top, 0.0))
+    return _section(W, "ビブラートタイプ", "".join(o), H, ["直近200曲の上位5つとその他の割合を表しています"], body_top=min(top, 0.0))
