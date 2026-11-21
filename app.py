@@ -41,7 +41,13 @@ HEADER_CONFIG_PC = [
     ("vibrato_count", "ビ回"), ("vibrato_type_code", "ビタ")
 ]
 
+# 曲別最高点(mode=best)だけ、日付の右に「回数」(過去に歌った回数。最大2桁)を足す。歌唱履歴の表は、変えない。
+# 回数の列の幅は「ビ回」「ビタ」と同じ(3.5%)。数字は最大2桁だが、見出しの「回数」(2文字)が、罫線からはみ出さない幅が要る(2.5%では、はみ出した)。
+# 足した分は、曲名/歌手名の列(23.0% → 19.5%)から削るので、表全体の幅は、変わらない。
+HEADER_CONFIG_PC_BEST = HEADER_CONFIG_PC[:1] + [("sing_count", "回数")] + HEADER_CONFIG_PC[1:]
+
 PC_NUM_SLOT_WIDTH = {
+    "sing_count": 3,    # 回数: 列の幅は「ビ回」と同じなので、箱の幅も同じ(3文字分)にして、見え方をそろえる
     "base_score": 6.4, "bonus_score": 4.4, "chart_total": 3,
     "pitch": 3, "stability": 3, "expressive": 3,
     "rhythm": 3, "vibrato_longtone": 3, "emphasis": 3,
@@ -85,6 +91,8 @@ PC_COL_WIDTHS = [
     "3.5%",  # ビ回
     "3.5%",  # ビタ
 ]
+
+PC_COL_WIDTHS_BEST = PC_COL_WIDTHS[:2] + ["3.5%"] + ["19.5%"] + PC_COL_WIDTHS[3:]   # 日付の右に回数(3.5%)を足し、曲名/歌手名(23.0%)から、その分(3.5%)を削る
 
 SP_COL_WIDTHS = [
     "39%",   # No + 日付/曲名/歌手名
@@ -314,10 +322,16 @@ def render_sp_header(sort_col, sort_dir, date, song, artist, mode, search):
             link_cls = ("sort-link " + active_class).strip()
 
             if idx == 0 and i == 0:
+                cnt_label = ""
+                if mode == "best":      # 曲別最高点だけ: 日付の右に「回数」(日付の幅を詰めて、その分にする。列の幅は、変えない)
+                    cnt_href = make_sort_href("sing_count", sort_col, sort_dir, date, song, artist, mode, search)
+                    cnt_active = ("active-desc" if sort_dir == "desc" else "active-asc") if sort_col == "sing_count" else ""
+                    cnt_label = anchor(cnt_href, "回数", cls=("sort-link sp-cnt-label " + cnt_active).strip())
                 inner = (
                     '<div class="sp-nodate-header">'
                     + '<div class="sp-no-label">No.</div>'
                     + anchor(href, label, cls=(link_cls + " sp-date-label").strip())
+                    + cnt_label
                     + '</div>'
                 )
                 links.append(inner)
@@ -371,12 +385,15 @@ def render_sp_body(df, sort_col, sort_dir, date, song, artist, mode, search, off
                 song_link = anchor(song_href, esc(s_val), cls="clip song")
 
 
+            cnt_cell = '<span class="sp-cnt-val">' + fmt(r["sing_count"]) + '</span>' if mode == "best" else ""   # 曲別最高点だけ
+
             row1 = (
                 '<tr class="record-top">'
                 + '<td class="meta-cell">'
                 +   '<div class="sp-nodate-row">'
                 +     '<span class="sp-no-num">' + str(offset + i + 1) + '</span>'
                 +     date_link
+                +     cnt_cell
                 +   '</div>'
                 + '</td>'
                 + '<td rowspan="3" class="score-cell" data-sid="' + esc(r["score_id"]) + '" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
@@ -428,7 +445,7 @@ def render_sp_body(df, sort_col, sort_dir, date, song, artist, mode, search, off
 def render_pc_header(sort_col, sort_dir, date, song, artist, mode, search):
     header_cells = ['<th class="no-col pc-th-first">No.</th>']
 
-    for col_key, label in HEADER_CONFIG_PC:
+    for col_key, label in (HEADER_CONFIG_PC_BEST if mode == "best" else HEADER_CONFIG_PC):
         href = make_sort_href(col_key, sort_col, sort_dir, date, song, artist, mode, search)
         active_class = ("active-desc" if sort_dir == "desc" else "active-asc") if col_key == sort_col else ""
         link_cls = ("sort-link " + active_class).strip()
@@ -444,7 +461,7 @@ def render_pc_header(sort_col, sort_dir, date, song, artist, mode, search):
 
     return (
         '<table class="dxg-table pc-header-table">'
-        + build_colgroup(PC_COL_WIDTHS)
+        + build_colgroup(PC_COL_WIDTHS_BEST if mode == "best" else PC_COL_WIDTHS)
         + '<thead><tr>' + "".join(header_cells) + '</tr></thead>'
         + '</table>'
     )
@@ -452,7 +469,8 @@ def render_pc_header(sort_col, sort_dir, date, song, artist, mode, search):
 
 # ========== PC版 body table (tbody だけ) ==========
 def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search, offset=0):
-    parts = ['<table class="dxg-table pc-body-table">' + build_colgroup(PC_COL_WIDTHS) + '<tbody>']
+    pc_widths = PC_COL_WIDTHS_BEST if mode == "best" else PC_COL_WIDTHS
+    parts = ['<table class="dxg-table pc-body-table">' + build_colgroup(pc_widths) + '<tbody>']
 
     def td_num(key, value):
         w = PC_NUM_SLOT_WIDTH.get(key)
@@ -461,7 +479,7 @@ def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search, off
         return '<td>' + num_slot(value, w) + '</td>'
 
     if df.empty:
-        colspan = len(PC_COL_WIDTHS)
+        colspan = len(pc_widths)
         parts.append(
             '<tr class="empty-row"><td colspan="' + str(colspan)
             + '" class="empty-cell">該当する曲はありません</td></tr>'
@@ -486,10 +504,13 @@ def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search, off
             else:
                 song_link = anchor(song_href, esc(s_val), cls="song-pc")
 
+            cnt_td = td_num("sing_count", fmt(r["sing_count"])) if mode == "best" else ""   # 曲別最高点だけ。他の数値の列(ビ回など)と同じ作り(箱の中で右寄せ)
+
             row = (
                 '<tr>'
                 + '<td>' + str(offset + i + 1) + '</td>'
                 + '<td>' + date_link + '</td>'
+                + cnt_td
                 + '<td class="meta-cell-pc pc-txt-cell">' + song_link + ' <span class="artist-pc">/ ' + esc(a_val) + '</span></td>'
                 + '<td class="score-cell-pc" data-sid="' + esc(r["score_id"]) + '" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
                 + td_num("base_score", fmt(r["base_score"], 3))
@@ -777,8 +798,7 @@ section.main > div.block-container,
 .pc-body-table td:first-child {
   text-align: right;
   padding-right: 8px;
-}
-.pc-body-table a, .pc-body-table span { font-size: 14px !important; }
+}.pc-body-table a, .pc-body-table span { font-size: 14px !important; }
 
 /* 数値スロット */
 .num-slot {
@@ -935,6 +955,24 @@ section.main > div.block-container,
   justify-content: flex-end;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 曲別最高点だけ: 日付の右の「回数」(最大2桁)。幅は、見出しと本体で同じ(28px)。日付は、その分、詰まる */
+.sp-cnt-val {
+  flex: 0 0 28px;
+  min-width: 28px;
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+  border-left: 1px solid #bdbdbd;
+  box-sizing: border-box;
+}
+.sp-cnt-label {
+  flex: 0 0 28px;
+  min-width: 28px;
+  border-left: 1px solid #bdbdbd;
+  box-sizing: border-box;
 }
 .sp-song-val {
   flex: 1 1 auto;
@@ -1112,6 +1150,8 @@ sort_col = get_query_param("sort_col")
 sort_dir = get_query_param("sort_dir")
 
 if mode == "best":
+    # 回数: 同じ曲名・歌手名で、過去に歌った回数(最高点の1件にまとめる前の、全歌唱の件数)
+    df["sing_count"] = df.groupby(['song_name', 'artist_name'])['total_score'].transform('size')
     idx = df.groupby(['song_name', 'artist_name'])['total_score'].idxmax()
     df = df.loc[idx]
     if not sort_col:
