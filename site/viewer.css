@@ -558,7 +558,7 @@ section.main > div.block-container,
 .others-wrap svg { display: block; }
 /* 動きのあとに、保存用の画像(右クリック・長押しで保存できる)を、SVGの真上に、ほぼ透明で重ねる(SVGは、そのまま見せ続ける) */
 .o-pc, .o-sp { position: relative; }
-.others-ovl { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+.others-ovl { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; overflow: hidden; }   /* 保存用の画像は、余白の分、枠の外へはみ出す(透明)。そのままだと、横スクロールバーが出るので、枠でクリップする(静的版で追加。Streamlit版には無い) */
 .others-img { display: block; width: 100%; height: auto; opacity: .01; pointer-events: auto; -webkit-touch-callout: default; }
 /* 画面の幅で、PC用(幅576)とスマホ用(幅420)を切り替える (表の .view-pc/.view-sp は、下に40pxの余白が付くので、使わない) */
 /* 区画の箱は flow-root にする: 画像の負の余白(表示の大きさを保つためのもの)が、箱の外へ突き抜けて、次の区画の位置を動かすのを防ぐ(縦並びのスマホ版で、画像に差し替わる瞬間に、下の区画が、約58px、下へずれていた) */
