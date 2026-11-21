@@ -18,6 +18,11 @@ body {
   color: rgb(49, 51, 63);
   background: #fff;
   text-align: left;
+  /* 横スクロールは、いらない(表は、画面の幅に収まる)。表の画像保存用の、透明な重ね画像(tablesave.js)は、余白の分、表の右へ少しはみ出す
+     (拡大表示では、約22px)ので、そのままだと、横スクロールバーが出る。縦スクロールは、そのまま。
+     注意: html ではなく body に付ける。採点結果画面が、body の overflow:hidden で、裏のスクロールを止めているため
+     (html に付けると、body の指定が効かなくなる) */
+  overflow-x: hidden;
 }
 svg { vertical-align: middle; }
 #app { padding: 0 1rem; }

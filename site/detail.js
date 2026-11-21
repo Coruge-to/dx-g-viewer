@@ -438,11 +438,15 @@ export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
     section: { x: 11 + 38, y: secY + 3 + dy, w: 420 - 38 - 6, h: 71 - 6, interval: sec("interval"), expression: sec("expression") },
     song: plays.length && songPos ? { ...songPos, ...songGeom(plays, songPos.W, songPos.H), plays, currentId: r.scoringDxgId } : null,
   };
-  // 開く動き(アニメーション)用: 動かす部品の id と、切り抜き窓の全幅
+  // 開く動き(アニメーション)用: 動かす部品の id と、切り抜き窓の全幅(w)と、「最後の点が見え終わる」窓の幅(wEnd)。
+  // 窓は、左から右へ広げ、wEnd まで広げた時点(=動きの終わり)で、最後の点が見え終わる。w まで広げる(=窓の右端がグラフの右端に届く)のを終わりにすると、
+  // 最後の点が、グラフの右端より手前にあるとき(右のグラフは、点が、各枠の中央に並ぶので、特に、歌った回数が少ないとき)に、見た目は、それより先に描き終わってしまい、
+  // 左のレーダー・音程/表現力のグラフより、早く終わって見える。
+  const secG = { pw: 420 - 38 - 6 }, sgG = plays.length && songPos ? songGeom(plays, songPos.W, songPos.H) : null;
   const anim = {
     radar: { poly: `${p}rpoly`, nums: `${p}rnum`, cx: 337, cy: 112 },
-    section: { rect: `${p}scr`, w: 420 - 38 - 6 + 12 },
-    song: plays.length && songPos ? { rect: `${p}sgr`, w: songGeom(plays, songPos.W, songPos.H).pw + 16 } : null,
+    section: { rect: `${p}scr`, w: secG.pw + 12, wEnd: Math.min(secG.pw + 12, (23.5 / 24) * secG.pw + 10) },       // 24区間。最後の点は、枠の中央(23.5/24)。窓の左端は L-6、点の半径は約4
+    song: sgG ? { rect: `${p}sgr`, w: sgG.pw + 16, wEnd: Math.min(sgG.pw + 16, ((sgG.n - 0.5) / sgG.n) * sgG.pw + 8 + 7) } : null,   // 最後の点は、枠の中央((n-0.5)/n)。窓の左端は L-8、点(印)の半径は約6
   };
   return { svg: body, width: W, height: H + dy, hot, anim };
 }
@@ -479,6 +483,7 @@ export function closeDetail() {
   if (staticUrl) { URL.revokeObjectURL(staticUrl); staticUrl = null; }
   document.removeEventListener("keydown", onKey);
   document.body.style.overflow = "";
+  document.body.style.paddingRight = "";
 }
 function onKey(e) { if (e.key === "Escape") closeDetail(); }
 
@@ -590,10 +595,16 @@ function playIntro(svgEl, anim, cancelled) {
       if (cancelled()) return resolve(false);
       const t = (performance.now() - t0) / 1000;
       setRadar(easeTable(RADAR_EASE, clamp01((t - INTRO.radarStart) / (INTRO.end - INTRO.radarStart))));
-      if (sec) { sec.setAttribute("width", String(anim.section.w * clamp01((t - INTRO.sectionStart) / (INTRO.end - INTRO.sectionStart)))); refreshClip(sec); }
-      if (song) { song.setAttribute("width", String(anim.song.w * clamp01((t - INTRO.songStart) / (INTRO.end - INTRO.songStart)))); refreshClip(song); }
+      // 窓は、「最後の点が見え終わる幅(wEnd)」まで広げて、動きの終わりと、最後の点が現れるタイミングを、そろえる
+      if (sec) { sec.setAttribute("width", String(anim.section.wEnd * clamp01((t - INTRO.sectionStart) / (INTRO.end - INTRO.sectionStart)))); refreshClip(sec); }
+      if (song) { song.setAttribute("width", String(anim.song.wEnd * clamp01((t - INTRO.songStart) / (INTRO.end - INTRO.songStart)))); refreshClip(song); }
       nums.style.opacity = String(clamp01((t - INTRO.numsStart) / INTRO.numsFade));
-      if (t >= total) { nums.style.opacity = "1"; return resolve(true); }
+      if (t >= total) {
+        nums.style.opacity = "1";
+        if (sec) { sec.setAttribute("width", String(anim.section.w)); refreshClip(sec); }      // 終わりは、窓を全幅に戻す(完成した絵と同じ)
+        if (song) { song.setAttribute("width", String(anim.song.w)); refreshClip(song); }
+        return resolve(true);
+      }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -633,7 +644,12 @@ export async function openDetail(record, all, opts = {}) {
   overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closeDetail(); });
   document.addEventListener("keydown", onKey);
   document.body.appendChild(overlay);
+  // 裏のページのスクロールを止める。ページ自体がスクロールする画面(静的サイト)では、スクロールバーが消えて、その幅の分(約15px)、裏の表が広がってしまう。
+  // 消える幅(0のこともある: スマホの細いスクロールバー・Streamlit版のように、ページ自体はスクロールしない画面)の分だけ、右に余白を足して、表の幅を変えない。
+  // 画面の幅を測るのは、スクロールを止める前(この時点では、まだ、スクロールバーがある)
+  const scrollbarW = window.innerWidth - document.documentElement.clientWidth;
   document.body.style.overflow = "hidden";
+  if (scrollbarW > 0) document.body.style.paddingRight = scrollbarW + "px";
   // OSの「視覚効果を減らす」の設定は、無視して、動きを出す(約1秒の短い動き)。設定を尊重したいときは、opts.respectReducedMotion = true
   const animate = opts.animate !== false && !(opts.respectReducedMotion && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   const fullPromise = svgToPngBlob(svg, width, height, scale);                       // 完成した静止画像 (保存用・最終表示)
