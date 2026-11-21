@@ -1,0 +1,49 @@
+# GitHub Pages へ公開する。
+# 自動更新(dxg-sync)が dataset/ をpushすると、この流れが動き、公開が更新される(新しい歌唱が、そのまま公開される)。
+# 公開するもの: site/ の中身(画面)と、dataset/ の3ファイル(データ)。それ以外(app.py、scripts/ など)は、公開しない。
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "dataset/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 続けてpushされたときは、古い実行を捨てて、新しいほうだけを動かす
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 公開するファイルを集める
+        run: |
+          mkdir _site
+          cp -r site/. _site/
+          rm -f _site/demo.html        # 試作の画面(../dataset を読む作りなので、ここでは動かない)
+          mkdir _site/dataset
+          cp dataset/history.jsonl dataset/meta.json dataset/comment_master.json _site/dataset/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
