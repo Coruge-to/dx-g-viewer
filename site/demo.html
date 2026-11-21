@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>採点詳細 デモ</title>
+<link rel="stylesheet" href="detail.css">
+<style>
+  body { margin: 0; font-family: Arial, "Yu Gothic", sans-serif; background: #fff; color: #222; }
+  header { padding: 12px 20px; font-size: 22px; font-weight: bold; color: #1666aa; }
+  .hint { padding: 0 20px 10px; color: #666; font-size: 13px; }
+  table { border-collapse: collapse; margin: 0 20px 40px; font-size: 14px; }
+  th, td { border: 1px solid #bbb; padding: 4px 10px; text-align: left; }
+  td.score { cursor: pointer; text-align: center; font-weight: bold; background: #aff; }
+  td.score:hover { outline: 2px solid #c33; outline-offset: -2px; }
+  td.score.hi { background: #cfc; } td.score.lo { background: #ccf; }
+</style>
+</head>
+<body>
+<header>採点詳細パネル デモ</header>
+<div class="hint">点数をクリックすると詳細が開きます (Esc / 背景クリック / × で閉じる)。<code>?id=採点ID</code> で直接開けます。</div>
+<table id="list"><thead><tr><th>日付</th><th>曲名 / 歌手名</th><th>点数</th></tr></thead><tbody></tbody></table>
+<script type="module">
+import { openDetail } from "./detail.js";
+const text = await (await fetch("../dataset/history.jsonl")).text();
+const all = text.split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const tb = document.querySelector("#list tbody");
+for (const r of all.slice(0, 60)) {
+  const tr = document.createElement("tr");
+  const p = parseFloat(r.totalPoint);
+  tr.innerHTML = `<td>${r.scoringDateTime.slice(2, 10)}</td><td>${r.contentsName} / ${r.artistName}</td><td class="score ${p >= 98 ? "hi" : p < 95 ? "lo" : ""}">${r.totalPoint}</td>`;
+  tr.querySelector(".score").addEventListener("click", () => openDetail(r, all));
+  tb.appendChild(tr);
+}
+const id = new URLSearchParams(location.search).get("id");
+const target = id ? all.find((r) => r.scoringDxgId === id) : null;
+if (target) openDetail(target, all);
+</script>
+</body>
+</html>
