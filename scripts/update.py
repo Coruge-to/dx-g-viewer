@@ -32,6 +32,19 @@ MAX_PAGES = 40
 MAX_NEW = 200  # 一覧が最大200件なので、それ以上は一度に取らない
 
 
+def read_env_file() -> dict[str, str]:
+    """リポジトリ直下の .env (Git管理外) から KEY=VALUE を読む。"""
+    p = dxg_lib.ROOT / ".env"
+    out: dict[str, str] = {}
+    if p.exists():
+        for line in p.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                out[k.strip()] = v.strip().strip('"').strip("'")
+    return out
+
+
 def call(card: str, **params) -> bytes:
     q = {"cdmCardNo": card, "enc": "sjis", **params}
     req = urllib.request.Request(API + "?" + urllib.parse.urlencode(q), headers={"User-Agent": UA})
@@ -91,7 +104,7 @@ def main() -> int:
     ap.add_argument("--heartbeat", action="store_true")
     args = ap.parse_args()
 
-    card = os.environ.get("DAM_CARD", "").strip()
+    card = os.environ.get("DAM_CARD", "").strip() or read_env_file().get("DAM_CARD", "").strip()
     if not card:
         print("DAM_CARD is not set", file=sys.stderr)
         return 2
