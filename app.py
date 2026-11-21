@@ -340,7 +340,7 @@ def render_sp_header(sort_col, sort_dir, date, song, artist, mode, search):
 
 
 # ========== SP版 body table (tbody だけ) ==========
-def render_sp_body(df, sort_col, sort_dir, date, song, artist, mode, search):
+def render_sp_body(df, sort_col, sort_dir, date, song, artist, mode, search, offset=0):
     parts = ['<table class="dxg-table sp-body-table">' + build_colgroup(SP_COL_WIDTHS) + '<tbody>']
 
     if df.empty:
@@ -375,7 +375,7 @@ def render_sp_body(df, sort_col, sort_dir, date, song, artist, mode, search):
                 '<tr class="record-top">'
                 + '<td class="meta-cell">'
                 +   '<div class="sp-nodate-row">'
-                +     '<span class="sp-no-num">' + str(i+1) + '</span>'
+                +     '<span class="sp-no-num">' + str(offset + i + 1) + '</span>'
                 +     date_link
                 +   '</div>'
                 + '</td>'
@@ -451,7 +451,7 @@ def render_pc_header(sort_col, sort_dir, date, song, artist, mode, search):
 
 
 # ========== PC版 body table (tbody だけ) ==========
-def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search):
+def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search, offset=0):
     parts = ['<table class="dxg-table pc-body-table">' + build_colgroup(PC_COL_WIDTHS) + '<tbody>']
 
     def td_num(key, value):
@@ -488,7 +488,7 @@ def render_pc_body(df, sort_col, sort_dir, date, song, artist, mode, search):
 
             row = (
                 '<tr>'
-                + '<td>' + str(i+1) + '</td>'
+                + '<td>' + str(offset + i + 1) + '</td>'
                 + '<td>' + date_link + '</td>'
                 + '<td class="meta-cell-pc pc-txt-cell">' + song_link + ' <span class="artist-pc">/ ' + esc(a_val) + '</span></td>'
                 + '<td class="score-cell-pc" data-sid="' + esc(r["score_id"]) + '" style="background:' + str(bg) + ';">' + fmt(r["total_score"], 3) + '</td>'
@@ -559,6 +559,9 @@ section.main > div.block-container,
   padding-left: 1rem !important;
   padding-right: 1rem !important;
   padding-top: 0 !important;
+  /* 下の余白: Streamlit の標準は 160px(10rem)。これを、Markdown の部品の「下の負の余白(-16px)」を打ち消す16pxだけにして、
+     ページの一番下の部品(ページ送り)の下端が、スクロールの下端になるようにする */
+  padding-bottom: 16px !important;
 }
 
 .dxg-table {
@@ -674,9 +677,16 @@ section.main > div.block-container,
 .sp-dropdown a { padding: 12px; border-bottom: 1px solid #eee; color: #333 !important; text-decoration: none !important; font-weight: bold;}
 
 .view-pc, .view-sp {
-  padding-bottom: 40px;
+  padding-bottom: 0;
   overflow: visible !important;
 }
+/* ページ送り(元サイトの /song と同じ: 「<< < 3 4 5 6 7 8 9 > >>」。現在のページは太字・濃い色、ほかは青いリンク)。
+   ページの一番下にくる部品: この下には、何も置かず、余白も付けない(スクロールの下端 = ページ送りの下端) */
+.pager { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 0 auto; padding: 8px 0 8px; max-width: var(--tbl-layout-w); zoom: var(--tbl-zoom); font: 20px/29px Arial, "Yu Gothic", sans-serif; }
+.pager-space { height: 12px; zoom: var(--tbl-zoom); }   /* ページ送りが出ない(1ページしかない)ときの、表の下の余白: ナビの灰色の線〜表の上端の間隔(12px)と同じ */
+.pager a { color: #428bca !important; text-decoration: none !important; }
+.pager a:hover { text-decoration: underline !important; }
+.pager strong { color: #333; font-weight: 700; }
 .view-sp {
   display: flex;
   flex-direction: column;
@@ -1177,6 +1187,49 @@ if selected_date: active_filters.append("日付: " + str(selected_date))
 if selected_song and selected_artist: active_filters.append("楽曲: " + str(selected_song))
 if keyword: active_filters.append("検索: " + str(keyword))
 
+# ---------- ページ送り(50件ずつ。元サイトの /song と同じ形) ----------
+PAGE_SIZE = 50
+total_rows = len(view)
+total_pages = max(1, -(-total_rows // PAGE_SIZE))
+try:
+    page = int(get_query_param("page") or 1)
+except ValueError:
+    page = 1
+page = min(max(page, 1), total_pages)
+page_offset = (page - 1) * PAGE_SIZE
+page_view = view.iloc[page_offset:page_offset + PAGE_SIZE]
+
+
+def render_pager(page, total_pages):
+    """ページ送り「<< < 3 4 5 6 7 > >>」: 数字は、最大5つ(5つの窓が、現在のページに合わせて動く)。
+    全体が5ページ以下なら、全部(3ページなら「1 2 3」)。6ページ以上なら、1〜3ページ目は「1 2 3 4 5」、4ページ目は「2 3 4 5 6」、5ページ目は「3 4 5 6 7」、最後の方は、最後の5つ。
+    現在のページは太字で、リンクにしない。1ページしかないときは、出さない"""
+    if total_pages <= 1:
+        return '<div class="pager-space"></div>'                 # ページ送りが出ないときも、表の下に、少し余白を置く
+    base = {k: v for k, v in {"mode": mode, "sort_col": sort_col, "sort_dir": sort_dir, "date": selected_date,
+                              "song": selected_song, "artist": selected_artist, "search": keyword}.items() if v}
+
+    def href(n):
+        p = dict(base)
+        if n > 1:
+            p["page"] = n
+        return "?" + urlencode(p)
+
+    items = []
+    if page > 1:
+        items += [anchor(href(1), "&lt;&lt;"), anchor(href(page - 1), "&lt;")]
+    if total_pages <= 5:
+        first, last = 1, total_pages                                   # 5ページ以下なら、全部(例: 3ページなら「1 2 3」)
+    else:
+        first = min(max(1, page - 2), total_pages - 4)                 # 5つの窓。現在のページが中央にくるように動かし、端では、窓が止まる
+        last = first + 4
+    for n in range(first, last + 1):
+        items.append("<strong>" + str(n) + "</strong>" if n == page else anchor(href(n), str(n)))
+    if page < total_pages:
+        items += [anchor(href(page + 1), "&gt;"), anchor(href(total_pages), "&gt;&gt;")]
+    return '<div class="pager">' + "".join(items) + "</div>"
+
+
 def render_others(df_all):
     """「その他集計」: 最高点別の曲数(積み上げ棒グラフ)と、ビブラートタイプの割合(円グラフ)"""
     import sys
@@ -1220,15 +1273,16 @@ elif view.empty:
     )
 else:
     html_sp_header = render_sp_header(sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
-    html_sp_body = render_sp_body(view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
+    html_sp_body = render_sp_body(page_view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword, page_offset)
     html_pc_header = render_pc_header(sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
-    html_pc_body = render_pc_body(view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword)
+    html_pc_body = render_pc_body(page_view, sort_col, sort_dir, selected_date, selected_song, selected_artist, mode, keyword, page_offset)
 
     html_string = (
         '<div class="dxg-scroll-wrapper">'
         + '<div class="view-pc"><div class="pc-table-wrapper">' + html_pc_header + html_pc_body + '</div></div>'
         + '<div class="view-sp">' + html_sp_header + html_sp_body + '</div>'
         + '</div>'
+        + render_pager(page, total_pages)
     )
 
 combined = DXG_CSS + nav_html + html_string
@@ -1267,6 +1321,8 @@ st.html(
   window.__dxgDetailInit = true;
   const base = "/app/static/dxgdetail/__VER__/";
   const link = document.createElement("link"); link.rel = "stylesheet"; link.href = base + "detail.css"; document.head.appendChild(link);
+  // 表(その1ページ分)の画像: 右クリック・長押しで保存できるように、表の真上に、ほぼ透明で重ねる (site/tablesave.js)
+  import(base + "tablesave.js").then((m) => m.initTableSave()).catch((e) => console.error("tablesave", e));
   let mod = null, all = null, loading = null;
   const load = () => loading || (loading = (async () => {
     mod = await import(base + "detail.js");
