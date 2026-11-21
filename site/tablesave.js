@@ -151,14 +151,9 @@ async function placeOverlay(live, blob, label) {
   ovl.style.width = "calc(100% + " + 2 * PAD_X + "px)"; ovl.style.height = "calc(100% + " + 2 * PAD_Y + "px)";
   const img = new Image();
   img.alt = label;
-  // 画像のアドレス:
-  //   パソコン(マウス): blob: にする。右クリックの「画像を保存」の初期のファイル名が、毎回、違う名前(ランダムな文字列)になり、重ならない
-  //                      (data: だと、名前の元がなく、いつも「ダウンロード.png」になって、2回目からは「ダウンロード (1).png」のように重なる)。
-  //   スマホ(タッチ): data:(画像の中身を、アドレスに、直接、埋め込む形)にする。スマホの写真保存には、ファイル名が出ない。
-  //                      Chrome(iOS)は、長押しのメニューで、画像のアドレスを、自分で取り直して保存する可能性があり、ブラウザのメモリ上にだけある blob: は、取り直せないかもしれないため。
-  img.src = touchMode
-    ? await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(blob); })
-    : URL.createObjectURL(blob);
+  // 画像のアドレスは、blob: にする(採点結果画面・グラフと同じ)。右クリックの「画像を保存」の初期のファイル名が、毎回、違う名前(ランダムな文字列)になり、重ならない。
+  // (data: にすると、名前の元がなく、いつも「ダウンロード.png」になって、2回目からは「ダウンロード (1).png」のように重なる)
+  img.src = URL.createObjectURL(blob);
   // 画像の読み込み(デコード)が終わってから、画面に置く。読み込み中の画像を置くと、iPhone は、長押しの「コピー」で、画像ではなく、代替テキスト(alt)の文字を、コピーしてしまい、「写真に保存」も出ない
   await img.decode();
   if (!img.naturalWidth) throw new Error("画像を読み込めなかった");
