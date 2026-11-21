@@ -41,7 +41,7 @@ function injectStyle() {
   const st = document.createElement("style");
   st.id = "tablesave-style";
   st.textContent = ".tbl-ovl{position:absolute;left:0;top:0;width:100%;height:100%;z-index:6;pointer-events:none}"
-    + ".tbl-ovl img{display:block;width:100%;height:100%;opacity:.01;pointer-events:none;-webkit-touch-callout:default}"
+    + ".tbl-ovl img{display:block;width:100%;height:100%;opacity:.01;pointer-events:none;-webkit-touch-callout:default}" // 透明度1%: 見た目に出ない。Chrome(iOS)は、約10〜20%より低い画像を長押しの対象から外すので、表は、Chrome(iOS)では保存できない。20%にすると、下の表と数pxずれて、文字が二重に透けて見えるため、1%のままにする
     + ".tbl-ovl.on img{pointer-events:auto}";
   document.head.appendChild(st);
 }
