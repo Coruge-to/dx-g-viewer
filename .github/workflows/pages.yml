@@ -39,6 +39,16 @@ jobs:
           mkdir _site/dataset
           cp dataset/history.jsonl dataset/meta.json dataset/comment_master.json _site/dataset/
 
+      # GitHub Pages は、ファイルを10分間キャッシュする(Cache-Control: max-age=600)。F5(通常の再読み込み)で、確認し直されるのは、index.html だけなので、
+      # JS・CSS が更新されても、最大10分、古いものが使われる。そこで、ファイルのアドレスに、commitの識別子(版)を付けて、更新が、すぐ届くようにする。
+      # (ソースの __VER__ を置き換える。データ(history.jsonl)は、読み込みのたびに、更新を確認する作りなので、対象外)
+      - name: ファイルのアドレスに版を付ける
+        run: |
+          VER="${GITHUB_SHA::8}"
+          sed -i "s/__VER__/${VER}/g" _site/index.html _site/viewer.js _site/detail.js
+          if grep -rq "__VER__" _site; then echo "__VER__ が残っています"; grep -rn "__VER__" _site; exit 1; fi
+          echo "版: ${VER}"
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3

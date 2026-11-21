@@ -2,8 +2,9 @@
 //   - API呼び出しなし / 外部ライブラリなし / 外部フォントなし(SVGを画像化するとき、外部フォントは使えないため)
 //   - 画像(<img>)として表示するので、右クリックの「画像をコピー/保存」、スマホの長押しの保存がそのまま使える
 //   - 点数の数字・ビブラートの波形は、公式DAM★ともの画像の字形を、ベクトル(SVGパス)に変換した assets.js から描く
-import { ASSETS } from "./assets.js";
-import { VIBG } from "./vib_gif.js";
+// ?v=__VER__ は、公開(GitHub Actions)のとき、commitの識別子に置き換わる(古いキャッシュが残らないように)。Streamlit版・ローカルでは、そのままで動く
+import { ASSETS } from "./assets.js?v=__VER__";
+import { VIBG } from "./vib_gif.js?v=__VER__";
 
 const FONT = `Arial, 'Yu Gothic', sans-serif`;   // 自前の表(app.py)と同じ
 const YEL = "#ffee33", WHITE = "#ffffff", BG = "#222222";
@@ -505,13 +506,20 @@ const SEC_SERIES = [
 ];
 function attachHover(wrap, img, hot, zoom) {
   wrap.style.setProperty("--z", String(zoom));
-  const tip = document.createElement("div"); tip.className = "dd-tip"; wrap.appendChild(tip);
-  const hl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  hl.setAttribute("viewBox", `0 0 ${hot.W} ${hot.H}`); hl.setAttribute("class", "dd-hl"); wrap.appendChild(hl);
-  const hide = () => { tip.style.display = "none"; hl.innerHTML = ""; };
+  // 吹き出し(と、強調の丸)は、グラフごとに1つずつ持つ: 音程・表現力のグラフ(sec)と、点数推移のグラフ(song)は、同時に出たままにできる。
+  // 前の吹き出しを消すのは、同じグラフの中で、別の点をクリックしたとき(入れ替わる)と、どのグラフの範囲外もクリックしたとき(両方消える)。
+  const mkPanel = () => {
+    const tip = document.createElement("div"); tip.className = "dd-tip"; wrap.appendChild(tip);
+    const hl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    hl.setAttribute("viewBox", `0 0 ${hot.W} ${hot.H}`); hl.setAttribute("class", "dd-hl"); wrap.appendChild(hl);
+    return { tip, hl, hide: () => { tip.style.display = "none"; hl.innerHTML = ""; } };
+  };
+  const panels = { sec: mkPanel(), song: mkPanel() };
+  const hideAll = () => { panels.sec.hide(); panels.song.hide(); };
   const halo = (shape, x, y, color) => `<circle cx="${f(x)}" cy="${f(y)}" r="9" fill="${color}" opacity=".85"/>` + marker(shape, x, y, "#fff", 5).replace('fill="#fff"', 'fill="none" stroke="#fff" stroke-width="1.3"');
   const row = (name, color, v) => `<div><span style="color:${color}">${esc(name)}:</span> ${esc(v)}</div>`;
-  const show = (html, border, px, py) => {
+  const show = (panel, html, border, px, py) => {
+    const { tip } = panel;
     const r = img.getBoundingClientRect(), k = r.width / hot.W;
     tip.innerHTML = html; tip.style.borderColor = border; tip.style.display = "block";
     const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -527,27 +535,28 @@ function attachHover(wrap, img, hot, zoom) {
     if (x >= s.x && x <= s.x + s.w && y >= s.y - 3 && y <= s.y + s.h + 3) {            // 区間ごとの音程・表現力
       const i = clamp(Math.floor(((x - s.x) / s.w) * 24), 0, 23);
       const vals = SEC_SERIES.map((se) => ({ ...se, v: s[se.key][i] })).filter((o) => o.v > 0);
-      if (!vals.length) return hide();
+      if (!vals.length) return panels.sec.hide();                                        // この区間に値が無いとき: このグラフの吹き出しだけ消す(点数推移の吹き出しは、そのまま)
       const px = s.x + ((i + 0.5) / 24) * s.w, Yf = (v) => s.y + (1 - (clamp(v, 40, 100) - 40) / 60) * s.h;
-      hl.innerHTML = vals.map((o) => halo(o.shape, px, Yf(o.v), o.color)).join("");
-      return show(`<div class="t">${i + 1}</div>` + vals.map((o) => row(o.name, o.color, o.v)).join(""), vals[0].color, px, s.y + s.h / 2);
+      panels.sec.hl.innerHTML = vals.map((o) => halo(o.shape, px, Yf(o.v), o.color)).join("");
+      return show(panels.sec, `<div class="t">${i + 1}</div>` + vals.map((o) => row(o.name, o.color, o.v)).join(""), vals[0].color, px, s.y + s.h / 2);
     }
     const g = hot.song;
     if (g && x >= g.x0 + g.L && x <= g.x0 + g.W - g.Rm && y >= g.y0 + g.T0 && y <= g.y0 + g.axisY) {   // 同じ曲の推移
       const i = clamp(Math.floor(((x - (g.x0 + g.L)) / g.pw) * g.n), 0, g.n - 1), play = g.plays[i];
       const px = g.x0 + g.L + ((i + 0.5) / g.n) * g.pw;
       const Yf = (v) => g.y0 + g.T0 + (1 - (clamp(v, g.yMin, g.yMax) - g.yMin) / (g.yMax - g.yMin)) * g.ph;
-      hl.innerHTML = SERIES.map((se) => halo(se.shape, px, Yf(se.get(play)), se.color)).join("");
+      panels.song.hl.innerHTML = SERIES.map((se) => halo(se.shape, px, Yf(se.get(play)), se.color)).join("");
       // 総合点・素点は、小数第3位まで出す(保管庫は、末尾の0を省いた形(95.2 など)なので、95.200 にそろえる)
       const p3 = (v) => (Number.isFinite(Number(v)) && String(v).trim() !== "" ? Number(v).toFixed(3) : String(v));
       const val = (se) => (se.name === "総合点" ? p3(play.totalPoint) : se.name === "素点" ? p3(play.rawPoint) : se.get(play));
-      return show(`<div class="t">${esc(md(play.scoringDateTime))}</div>` + SERIES.map((se) => row(se.name, se.color, val(se))).join(""), SERIES[0].color, px, g.y0 + g.T0 + g.ph * 0.45);
+      return show(panels.song, `<div class="t">${esc(md(play.scoringDateTime))}</div>` + SERIES.map((se) => row(se.name, se.color, val(se))).join(""), SERIES[0].color, px, g.y0 + g.T0 + g.ph * 0.45);
     }
-    hide();
+    hideAll();                                                                           // どのグラフの範囲外でもない: 両方の吹き出しを消す
   };
   // PC(マウス)もスマホ(指)も、同じ操作にそろえる: クリック(タップ)で表示して、そのまま残す。グラフの外(表示範囲外)をクリック(タップ)したら消える。
   //   スマホには、ホバー(乗せる)が無いので、マウスだけ「乗せている間だけ表示」にすると、操作が食い違う。
-  //   別の点をクリックすると、その点の表示に切り替わる。画像の外(暗い背景)をクリックすると、採点結果画面そのものが閉じる。
+  //   同じグラフの中で、別の点をクリックすると、その点の表示に切り替わる。別のグラフの吹き出しは、そのまま(2つのグラフの吹き出しは、共存する)。
+  //   画像の外(暗い背景)をクリックすると、採点結果画面そのものが閉じる。
   //   マウスの右ボタン(右クリックの「画像を保存」など)では、表示を変えない。
   img.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse" && e.button !== 0) return; onMove(e); });
 }

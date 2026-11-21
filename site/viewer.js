@@ -479,6 +479,9 @@ function buildTables(allRows, st) {
 }
 
 // ---------- 起動 ----------
+// 公開(GitHub Actions)のとき、__VER__ は、commitの識別子に置き換わる(index.html と同じ。ファイルのアドレスに版を付けて、10分のキャッシュで、古いものが残らないようにする)
+const V = "?v=__VER__";
+
 async function loadText(url) {
   const r = await fetch(url, { cache: "no-cache" });
   if (!r.ok) throw new Error(url + ": " + r.status);
@@ -494,14 +497,14 @@ async function main() {
   style.textContent = await loadText("viewer.css");
   document.head.appendChild(style);
   const detailCss = document.createElement("link");
-  detailCss.rel = "stylesheet"; detailCss.href = "detail.css";
+  detailCss.rel = "stylesheet"; detailCss.href = "detail.css" + V;
   document.head.appendChild(detailCss);
 
   const text = await loadText("dataset/history.jsonl");
   const records = text.split("\n").filter(Boolean).map((l) => JSON.parse(l));
 
   if (st.mode === "others") {
-    const { renderOthers, initOthers } = await import("./charts.js");
+    const { renderOthers, initOthers } = await import("./charts.js" + V);
     app.innerHTML = renderNav(st) + renderOthers(toRows(records));
     initOthers();
   } else {
@@ -510,14 +513,14 @@ async function main() {
   document.title = "DX-G Viewer";
 
   // 表の画像保存(右クリック・長押し)
-  import("./tablesave.js").then((m) => m.initTableSave()).catch((e) => console.error("tablesave", e));
+  import("./tablesave.js" + V).then((m) => m.initTableSave()).catch((e) => console.error("tablesave", e));
 
   // 点数をクリックすると、採点結果画面が開く
   let detail = null;
   document.addEventListener("click", async (e) => {
     const td = e.target.closest && e.target.closest("td[data-sid]");
     if (!td || !td.dataset.sid) return;
-    detail = detail || (await import("./detail.js"));
+    detail = detail || (await import("./detail.js" + V));
     const rec = records.find((r) => r.scoringDxgId === td.dataset.sid);
     if (rec) detail.openDetail(rec, records);
   });
