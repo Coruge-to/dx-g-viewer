@@ -479,8 +479,9 @@ function buildTables(allRows, st) {
 }
 
 // ---------- 起動 ----------
-// 公開(GitHub Actions)のとき、__VER__ は、commitの識別子に置き換わる(index.html と同じ。ファイルのアドレスに版を付けて、10分のキャッシュで、古いものが残らないようにする)
-const V = "?v=__VER__";
+// 版: index.html が、version.json から読んだ版を付けて、この viewer.js を読み込む(viewer.js?v=...)。その版を、読み込む先(detail.js など)のアドレスにも、そのまま付ける。
+// ファイルのアドレスに版を付けると、10分のキャッシュで、古いものが残らない。版が無いとき(ローカル・Streamlit版の試験)は、空のまま
+const V = new URL(import.meta.url).search;
 
 async function loadText(url) {
   const r = await fetch(url, { cache: "no-cache" });

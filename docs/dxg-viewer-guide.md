@@ -379,3 +379,19 @@ Streamlit版と静的版を、同じ幅のiframeで並べて、全要素の、�
 3. 確認: `https://github.com/Coruge-to/dx-g-viewer/actions` で成功を見て、公開アドレスを開く。
 
 注意: 開発のコミット（`site/` など）は、`sync.py` が、自動では、pushしません（3.5）。手で `git push` します。
+
+### 9.6 キャッシュ（更新が届かないとき）
+
+GitHub Pages は、すべてのファイルを、10分間キャッシュします（`Cache-Control: max-age=600`）。F5（通常の再読み込み）で、確認し直されるのは `index.html` だけで、しかも、アドレスごとに、別々にキャッシュされます（`/` と `?mode=best` は、別）。何もしないと、JS・CSSを更新しても、最大10分、画面ごとに、古い版が残ります（2026-11-22に、実際に起きました）。
+
+対策として、次の仕組みにしています。
+
+1. 公開のとき、`version.json`（`{"v":"<commitの識別子>"}`）を作る。
+2. `index.html` は、更新しない固定の殻で、`version.json` を、毎回、確認し直して（`cache: "no-cache"`）、`viewer.js?v=<版>` を読み込む。
+3. `viewer.js` は、自分に付いた版を、`detail.js`、`tablesave.js`、`charts.js`、`detail.css` のアドレスにも付ける。`detail.js` の中の `import`（`assets.js`、`vib_gif.js`）には、公開のとき、ソースの `__VER__` を、同じ版に置き換えて付ける。
+
+アドレスに版が付くので、新しいデプロイの後は、次のページ読み込みで、新しい版が読まれます（`index.html` が古いままでも）。`version.json` は、ごく小さなファイルで、確認し直しは、軽い通信だけです。データ（`history.jsonl`）は、読み込みのたびに、更新を確認する作りです。
+
+ローカルや、Streamlit版の試験（`tools/copy_static_for_test.ps1`）では、`version.json` が無いので、版なしで読みます（そのままで動きます）。
+
+それでも、古い版が見えるときは、`Ctrl+F5`（または `Ctrl+Shift+R`）で、キャッシュを無視して、読み込み直します。

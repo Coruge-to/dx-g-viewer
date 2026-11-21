@@ -39,15 +39,19 @@ jobs:
           mkdir _site/dataset
           cp dataset/history.jsonl dataset/meta.json dataset/comment_master.json _site/dataset/
 
-      # GitHub Pages は、ファイルを10分間キャッシュする(Cache-Control: max-age=600)。F5(通常の再読み込み)で、確認し直されるのは、index.html だけなので、
-      # JS・CSS が更新されても、最大10分、古いものが使われる。そこで、ファイルのアドレスに、commitの識別子(版)を付けて、更新が、すぐ届くようにする。
-      # (ソースの __VER__ を置き換える。データ(history.jsonl)は、読み込みのたびに、更新を確認する作りなので、対象外)
-      - name: ファイルのアドレスに版を付ける
+      # GitHub Pages は、ファイルを10分間キャッシュする(Cache-Control: max-age=600)。F5(通常の再読み込み)で、確認し直されるのは、index.html だけで、
+      # しかも、アドレスごとに別々にキャッシュされる。JS・CSS が更新されても、最大10分、古いものが使われる。
+      # そこで、(1) version.json に、commitの識別子(版)を書く。index.html(更新しない固定の殻)が、これを、毎回、確認し直して、
+      # 版を付けたアドレスで viewer.js を読む。viewer.js は、同じ版を、detail.js などのアドレスにも付ける。
+      # (2) detail.js の中の import には、ソースの __VER__ を、この版に置き換えて付ける。
+      # (データ(history.jsonl)は、読み込みのたびに、更新を確認する作りなので、対象外)
+      - name: 版を付ける
         run: |
           VER="${GITHUB_SHA::8}"
-          sed -i "s/__VER__/${VER}/g" _site/index.html _site/viewer.js _site/detail.js
+          printf '{"v":"%s"}\n' "${VER}" > _site/version.json
+          sed -i "s/__VER__/${VER}/g" _site/detail.js
           if grep -rq "__VER__" _site; then echo "__VER__ が残っています"; grep -rn "__VER__" _site; exit 1; fi
-          echo "版: ${VER}"
+          echo "版: ${VER}"; cat _site/version.json
 
       - uses: actions/configure-pages@v5
 

@@ -8,8 +8,17 @@
 </head>
 <body>
 <div id="app" class="md"></div>
-<!-- ?v=__VER__ は、公開(GitHub Actions)のとき、commitの識別子に置き換わる。GitHub Pages は、ファイルを10分間キャッシュするので、
-     アドレスに版を付けて、更新が、すぐ(F5だけで)届くようにする。ローカルでは、そのまま(置き換わらなくても動く) -->
-<script type="module" src="viewer.js?v=__VER__"></script>
+<!-- この index.html は、更新しない(固定の殻)。GitHub Pages は、ファイルを10分キャッシュし、F5(通常の再読み込み)でも、確認し直されるのは、この index.html だけなので、
+     JS・CSS を、そのまま読むと、更新後も、最大10分、古いものが使われる(アドレスごとに、別々に古くなる)。
+     そこで、版(version.json。公開のとき、commitの識別子で作る)を、毎回、確認し直して(cache: "no-cache")、その版を付けたアドレスで、viewer.js を読む。
+     version.json が無いとき(ローカル・Streamlit版の試験)は、版なしで読む。 -->
+<script type="module">
+  let q = "";
+  try {
+    const r = await fetch("version.json", { cache: "no-cache" });
+    if (r.ok) { const v = (await r.json()).v; if (v) q = "?v=" + encodeURIComponent(v); }
+  } catch (e) { /* 版なしで続ける */ }
+  await import("./viewer.js" + q);
+</script>
 </body>
 </html>
