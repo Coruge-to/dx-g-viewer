@@ -8,7 +8,9 @@
   font-style: normal;
   font-display: swap;
 }
-html { -webkit-text-size-adjust: 100%; }
+/* スクロールバーの幅を、常に確保する。採点結果画面を開くとき、裏のスクロールを止めてスクロールバーが消えても、表の位置が動かない。
+   (JSで、整数pxの余白を足す方法では、実際の幅が小数(例: 13.64px)のとき、0.3px前後ずれた) */
+html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
 *, *::before, *::after { box-sizing: border-box; }
 body {
   margin: 0;

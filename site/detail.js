@@ -660,9 +660,12 @@ export async function openDetail(record, all, opts = {}) {
   // 裏のページのスクロールを止める。ページ自体がスクロールする画面(静的サイト)では、スクロールバーが消えて、その幅の分(約15px)、裏の表が広がってしまう。
   // 消える幅(0のこともある: スマホの細いスクロールバー・Streamlit版のように、ページ自体はスクロールしない画面)の分だけ、右に余白を足して、表の幅を変えない。
   // 画面の幅を測るのは、スクロールを止める前(この時点では、まだ、スクロールバーがある)
+  // 静的サイトは、CSSの scrollbar-gutter: stable で、幅を常に確保している(余白を足す必要がない。整数pxの余白は、小数の幅とずれる)。
+  // それが効かない画面(Streamlit版・古いブラウザ)だけ、余白で補う。
+  const gutterStable = getComputedStyle(document.documentElement).scrollbarGutter?.startsWith("stable");
   const scrollbarW = window.innerWidth - document.documentElement.clientWidth;
   document.body.style.overflow = "hidden";
-  if (scrollbarW > 0) document.body.style.paddingRight = scrollbarW + "px";
+  if (!gutterStable && scrollbarW > 0) document.body.style.paddingRight = scrollbarW + "px";
   // OSの「視覚効果を減らす」の設定は、無視して、動きを出す(約1秒の短い動き)。設定を尊重したいときは、opts.respectReducedMotion = true
   const animate = opts.animate !== false && !(opts.respectReducedMotion && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   const fullPromise = svgToPngBlob(svg, width, height, scale);                       // 完成した静止画像 (保存用・最終表示)
