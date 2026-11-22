@@ -290,6 +290,7 @@ section.main > div.block-container,
   display: inline-block;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  font-kerning: none;   /* Arial の「11」は、カーニングで詰まり(14pxで約1px)、「11」を含む値だけ、幅が狭く、「.」の位置がずれる。 切って、数字の幅を、全部同じにする(PC版・スマホ版とも) */
   white-space: pre;
   padding: 0;
 }
@@ -558,7 +559,8 @@ section.main > div.block-container,
   }
 
   /* 点数: 通常は6桁(98.263)で、12px・字間は詰めない。 7桁(100.000)のときだけ、字間を詰めて、列(約45〜53px)に収める(.score-100。viewer.js が付ける) */
-  .sp-body-table .score-cell { font-size: 12px !important; letter-spacing: 0; }
+  /* font-kerning: none — Arial の「11」は、カーニングで0.9px詰まり(12px)、「11」を含む点数(1.4%)だけ、幅が狭く、「.」の位置がずれる。 カーニングを切って、数字の幅を、全部同じにする(2026-11-23) */
+  .sp-body-table .score-cell { font-size: 12px !important; letter-spacing: 0; font-kerning: none; }
   .sp-body-table .score-cell.score-100 { letter-spacing: -0.7px; }   /* viewer.js の SCORE_100_LS と、同じ値(中央揃えの補正に使う) */
 
   .sp-header-table .sort-link { padding: 1px 2px !important; font-size: 11px; line-height: 1.15; }
@@ -604,6 +606,7 @@ section.main > div.block-container,
 
 /* 点数のセルは、クリックすると採点結果画面が開く */
 .score-cell-pc[data-sid], .score-cell[data-sid] { cursor: pointer; }
+.score-cell-pc, .score-cell { font-kerning: none; }   /* 点数(PC版・スマホ版)。 理由は、.num-slot と同じ */
 
 /* ===== その他集計の余白(静的サイトで変更。Streamlit 版とは違う) =====
    ナビの灰色線 〜 中身(見出しの帯の上端)、最後の説明文 〜 ページの下端の余白を、歌唱履歴の表と同じ 12px にそろえる

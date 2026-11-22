@@ -284,7 +284,20 @@ function centerPad(text, size) {
   if (!s) return 0;
   return (glyphInset(s[s.length - 1]).r - glyphInset(s[0]).l) * size;
 }
-function renderSpBody(rows, st, offset) {
+// 6桁の点数(98.927 など)は、全行で、同じ余白にする(全データの centerPad の平均)。
+// Arial の数字は、どれも同じ幅なので、6桁なら、箱の位置が同じで、「.」の位置が、全行でそろう。 行ごとに余白を変えると(末尾が 1 の行は 1.6px 動く)、「.」の位置が、行ごとにずれて、数値によって、描かれる位置が違って見えた(2026-11-23)。
+// 平均の余白で、全体の寄りだけを、直す。 6桁でない点数(7桁の 100.000 など)は、「.」の位置が、そもそも違うので、行ごとに、字の空きで寄せる。
+const SCORE_DIGITS = 6;
+let _scorePad6 = null;
+function scorePad6(allRows) {
+  if (_scorePad6 === null) {
+    const pads = [];
+    for (const r of allRows) { const t = fmt(r.total_score, 3); if (t.length === SCORE_DIGITS) pads.push(centerPad(t, 12)); }
+    _scorePad6 = pads.length ? pads.reduce((a, b) => a + b, 0) / pads.length : 0;
+  }
+  return _scorePad6;
+}
+function renderSpBody(rows, st, offset, pad6) {
   const parts = ['<table class="dxg-table sp-body-table">' + colgroup(SP_COL_WIDTHS) + "<tbody>"];
   if (!rows.length) {
     parts.push('<tr class="empty-row"><td colspan="' + SP_COL_WIDTHS.length + '" class="empty-cell">該当する曲はありません</td></tr>');
@@ -304,7 +317,9 @@ function renderSpBody(rows, st, offset) {
       const cntCell = st.mode === "best" ? '<span class="sp-cnt-val">' + fmt(r.sing_count) + "</span>" : "";   // 曲別最高点だけ
       const W = SP_NUM_SLOT_WIDTH;
       const scoreText = fmt(r.total_score, 3);   // 通常は6桁(98.263)。 7桁(100.000)のときだけ、字間を詰める(.score-100)
-      const cp = centerPad(scoreText, 12) + (scoreText.length > 6 ? SCORE_100_LS : 0) + 2 * SCORE_OPTICAL_SHIFT;   // 点数は12px。 描かれる数字を、セルの中央に、見た目で揃える(上の centerPad)。 余白 p で、中心が p/2 動くので、中心を e 動かすには、2e の余白
+      // 点数は12px。 6桁は、全行で同じ余白(「.」の位置をそろえる。上の scorePad6)。 それ以外(100.000 など)は、行ごとに、描かれる数字を、セルの中央に揃える(centerPad)。 余白 p で、中心が p/2 動くので、中心を e 動かすには、2e の余白
+      const base = scoreText.length === SCORE_DIGITS ? pad6 : centerPad(scoreText, 12) + (scoreText.length > 6 ? SCORE_100_LS : 0);
+      const cp = base + 2 * SCORE_OPTICAL_SHIFT;
       const scorePad = cp >= 0 ? "padding-left:" + cp.toFixed(2) + "px;" : "padding-right:" + (-cp).toFixed(2) + "px;";
       const row1 =
         '<tr class="record-top">'
@@ -499,7 +514,7 @@ function buildTables(allRows, st) {
   return (
     '<div class="dxg-scroll-wrapper">'
     + '<div class="view-pc"><div class="pc-table-wrapper">' + renderPcHeader(st) + renderPcBody(pageView, st, offset) + "</div></div>"
-    + '<div class="view-sp">' + renderSpHeader(st) + renderSpBody(pageView, st, offset) + "</div>"
+    + '<div class="view-sp">' + renderSpHeader(st) + renderSpBody(pageView, st, offset, scorePad6(allRows)) + "</div>"
     + "</div>"
     + renderPager(page, totalPages, st)
   );
