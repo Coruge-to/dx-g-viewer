@@ -27,6 +27,38 @@ function measure(txt, size) {
   _ctx.font = `bold ${size}px ${FONT}`;
   return _ctx.measureText(txt).width;
 }
+// ♭(フラット)は、書体の字をそのまま使うが、そのままだと、全角の幅(15px)で、前後に隙間ができて浮き、大文字より背も高い(約12.6px。大文字は約10.8px)。
+// そこで、端末が選んだ書体の ♭ の、実際に描かれる範囲を、canvasで測り、(1) 左右の余白を削り、(2) 上端と下端を、大文字(E・D など)の上端とベースラインに、揃える。
+// 測るのは、書体の字そのもの(端末ごとに、違う書体でも、同じ方法で揃う)。 測れなかったとき(0や NaN)は、Windows(Yu Gothic)での実測値を使う。
+const FLAT_GAP = 1.0;    // ♭の前後の間隔(15pxの文字のとき。size に比例)
+const FLAT_BOLD = 0.3;   // ♭の線を、縁取りで太らせる量(15pxの文字のとき。size に比例)。 0 だと、周りの太字に比べて細すぎ、0.55 以上だと、膨らみの穴がつぶれる
+let _flat = null;
+function flatMetrics() {
+  if (_flat) return _flat;
+  _ctx ??= document.createElement("canvas").getContext("2d");
+  _ctx.font = `bold 100px ${FONT}`;
+  const m = _ctx.measureText("♭"), e = _ctx.measureText("E");
+  const v = { asc: m.actualBoundingBoxAscent / 100, desc: m.actualBoundingBoxDescent / 100, l: -m.actualBoundingBoxLeft / 100, r: m.actualBoundingBoxRight / 100, cap: e.actualBoundingBoxAscent / 100 };
+  const ok = [v.asc, v.desc, v.l, v.r, v.cap].every(Number.isFinite) && v.asc + v.desc > 0.2 && v.r - v.l > 0.05 && v.cap > 0.3;
+  return (_flat = ok ? v : { asc: 0.8, desc: 0.04, l: 0.33, r: 0.65, cap: 0.72 });
+}
+// str の ♭ を、上の方法で揃えて、文字と ♭ を、横に並べる。 {svg, end(右端のx)} を返す。 ♭の字は、文字と同じ色で、少しだけ太らせる(FLAT_BOLD)
+function textWithFlats(x, y, str, size, fill) {
+  const parts = String(str ?? "").split("♭");
+  let svg = "", cx = x;
+  parts.forEach((p, i) => {
+    if (p) { svg += `<text x="${f(cx)}" y="${y}" font-size="${size}" fill="${fill}">${esc(p)}</text>`; cx += measure(p, size); }
+    if (i < parts.length - 1) {
+      const m = flatMetrics(), fs = (size * m.cap) / (m.asc + m.desc), gap = (FLAT_GAP * size) / 15;
+      cx += gap;
+      svg += `<text x="${(cx - m.l * fs).toFixed(2)}" y="${(Number(y) - m.desc * fs).toFixed(2)}" font-size="${fs.toFixed(2)}" fill="${fill}" stroke="${fill}" stroke-width="${((FLAT_BOLD * size) / 15).toFixed(2)}" stroke-linejoin="round">♭</text>`;
+      cx += (m.r - m.l) * fs + gap;
+    }
+  });
+  return { svg, end: cx };
+}
+// キーの表記: 保管庫の全角の ＋ ・ － を、半角の + ・ − (U+2212。+ と同じ幅の、本物のマイナス)にそろえる(±0 は、もともと半角)
+const keyText = (k) => String(k ?? "±0").replace(/＋/g, "+").replace(/[－-]/g, "−");
 const NO_HEAD = "、。，．）」』】！？ー・ぁぃぅぇぉっゃゅょ)>＞〉》]"; // 行頭に来ないようにする文字 (簡易の禁則処理)
 // 分析レポートの折り返し(ルール):
 //   1) 文(。！？)の途中では改行しない。1文が1行に収まらないときだけ、文字単位で折り返す
@@ -450,7 +482,11 @@ export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
   s += `<text x="338" y="${f(rv3 + 4.5)}" font-size="11" fill="${YEL}">タイプ<tspan font-size="13" fill="${WHITE}">${esc(r.vibratoTypeText || "")}</tspan></text>`;
   s += vibratoSVG(r.vibratoType || "N", p, 338, (rv1 + rv2) / 2 - 16);
   s += `<rect x="225" y="${f(line2)}" width="215" height="1" fill="#2a4aa8" opacity=".75"/>`;
-  s += `<text x="225" y="${f(c3 + 5.5)}" font-size="15" fill="${WHITE}">音域 <tspan dx="8">${esc(r.singingRangeLowest)}～${esc(r.singingRangeHighest)}</tspan><tspan font-size="11" fill="${YEL}" dx="10">キー</tspan><tspan font-size="15" fill="${WHITE}">${esc(r.lastPerformKey ?? "±0")}</tspan></text>`;
+  {   // 音域 m2A♭～hiD♭ キー±0。 ♭は、書体の字(全角で浮く・端末で形が変わる)ではなく、自前の図形で描く。 位置は、文字の幅を測って、順に決める
+    const y = f(c3 + 5.5), range = textWithFlats(225 + measure("音域 ", 15) + 8, y, `${r.singingRangeLowest}～${r.singingRangeHighest}`, 15, WHITE);
+    const kx = range.end + 10;
+    s += `<text x="225" y="${y}" font-size="15" fill="${WHITE}">音域</text>${range.svg}<text x="${f(kx)}" y="${y}" font-size="11" fill="${YEL}">キー</text><text x="${f(kx + measure("キー", 11))}" y="${y}" font-size="15" fill="${WHITE}">${esc(keyText(r.lastPerformKey))}</text>`;
+  }
   const leftH = bottom + 7.5;                                       // 画像の下端。最下段の文字・図形の下端〜画像の下端の余白を、上端〜曲名の余白(13.5px)に揃える
   // 右(同じ曲の推移)
   const plays = all.filter((x) => x.requestNo === r.requestNo).sort((a, b) => a.scoringDateTime.localeCompare(b.scoringDateTime)).slice(-10);
