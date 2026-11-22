@@ -31,7 +31,11 @@ function measure(txt, size) {
 // そこで、端末が選んだ書体の ♭ の、実際に描かれる範囲を、canvasで測り、(1) 左右の余白を削り、(2) 上端と下端を、大文字(E・D など)の上端とベースラインに、揃える。
 // 測るのは、書体の字そのもの(端末ごとに、違う書体でも、同じ方法で揃う)。 測れなかったとき(0や NaN)は、Windows(Yu Gothic)での実測値を使う。
 const FLAT_GAP = 1.0;    // ♭の前後の間隔(15pxの文字のとき。size に比例)
-const FLAT_BOLD = 0.3;   // ♭の線を、縁取りで太らせる量(15pxの文字のとき。size に比例)。 0 だと、周りの太字に比べて細すぎ、0.55 以上だと、膨らみの穴がつぶれる
+// ♭の棒の太さを、大文字 I の棒の太さの何倍にそろえるか。 書体の ♭ は細い(Windowsで I の0.2倍、iPhone はさらに細い)ので、足りない分だけ、縁取りで太らせる。
+// 太らせる量は、端末の書体ごとに、棒の太さを測って決める(固定の太らせ量だと、書体が細い iPhone で、細すぎた)。
+// スマホ(画面幅1000px未満。表のスマホ版と同じ区切り)は、iPhone の実機で 0.5 がちょうどよかった。 PC は、0.5 だと太すぎ、Windows で今までの見た目(固定0.3px ≒ 0.35倍)がよかった(2026-11-23)。
+const FLAT_STEM_NARROW = 0.5, FLAT_STEM_WIDE = 0.35;
+const flatStem = () => (window.matchMedia?.("(min-width: 1000px)").matches ? FLAT_STEM_WIDE : FLAT_STEM_NARROW);
 // 字の範囲は、measureText の actualBoundingBox ではなく、実際に描いた絵のピクセルから測る。
 // (iPhone の Safari 系では、actualBoundingBoxLeft/Right が、字の範囲ではなく、送り幅いっぱい(0〜100)で返り、余白を削れなかった。 2026-11-22 に、実機で確認)
 function inkBox(ch) {
@@ -46,27 +50,36 @@ function inkBox(ch) {
   const d = g.getImageData(0, 0, S, S).data;
   let x0 = S, x1 = -1, y0 = S, y1 = -1;
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (d[(y * S + x) * 4 + 3] > 64) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-  return x1 < 0 ? null : { l: (x0 - ox) / 100, r: (x1 + 1 - ox) / 100, asc: (oy - y0) / 100, desc: (y1 + 1 - oy) / 100 };
+  if (x1 < 0) return null;
+  // 棒の太さ: 字の上から10〜30%の行(♭は、棒だけの部分。I は、全体が棒)の、画素の濃さの合計(em)。 縁のぼけも含めて、小数まで出る
+  const h = y1 + 1 - y0;
+  let s = 0, n = 0;
+  for (let y = Math.round(y0 + h * 0.1); y <= Math.round(y0 + h * 0.3); y++) { let r = 0; for (let x = 0; x < S; x++) r += d[(y * S + x) * 4 + 3] / 255; s += r; n++; }
+  return { l: (x0 - ox) / 100, r: (x1 + 1 - ox) / 100, asc: (oy - y0) / 100, desc: (y1 + 1 - oy) / 100, stem: s / n / 100 };
 }
 let _flat = null;
 function flatMetrics() {
   if (_flat) return _flat;
   let v = null;
-  try { const b = inkBox("♭"), e = inkBox("E"); if (b && e) v = { asc: b.asc, desc: b.desc, l: b.l, r: b.r, cap: e.asc }; } catch { /* canvas が読めない環境 */ }
-  const ok = v && [v.asc, v.desc, v.l, v.r, v.cap].every(Number.isFinite) && v.asc + v.desc > 0.2 && v.r - v.l > 0.05 && v.r - v.l < 0.9 && v.cap > 0.3;
-  return (_flat = ok ? v : { asc: 0.8, desc: 0.04, l: 0.33, r: 0.65, cap: 0.72 });
+  try { const b = inkBox("♭"), e = inkBox("E"), i = inkBox("I"); if (b && e && i) v = { asc: b.asc, desc: b.desc, l: b.l, r: b.r, cap: e.asc, stem: b.stem, stemI: i.stem }; } catch { /* canvas が読めない環境 */ }
+  const ok = v && [v.asc, v.desc, v.l, v.r, v.cap, v.stem, v.stemI].every(Number.isFinite) && v.asc + v.desc > 0.2 && v.r - v.l > 0.05 && v.r - v.l < 0.9 && v.cap > 0.3 && v.stem > 0 && v.stemI > 0.05;
+  return (_flat = ok ? v : { asc: 0.8, desc: 0.04, l: 0.4, r: 0.71, cap: 0.72, stem: 0.0346, stemI: 0.1446 });   // 代用は、Windows(Yu Gothic)の実測値
 }
-// str の ♭ を、上の方法で揃えて、文字と ♭ を、横に並べる。 {svg, end(右端のx)} を返す。 ♭の字は、文字と同じ色で、少しだけ太らせる(FLAT_BOLD)
+// str の ♭ を、上の方法で揃えて、文字と ♭ を、横に並べる。 {svg, end(右端のx)} を返す。
+// 縁取りで太らせると、その半分(w/2)だけ、字が上下左右にふくらむ。 縁取りを含めた外側が、大文字の高さ・ベースラインに合うように、♭の大きさと位置を補正する。
 function textWithFlats(x, y, str, size, fill) {
   const parts = String(str ?? "").split("♭");
   let svg = "", cx = x;
   parts.forEach((p, i) => {
     if (p) { svg += `<text x="${f(cx)}" y="${y}" font-size="${size}" fill="${fill}">${esc(p)}</text>`; cx += measure(p, size); }
     if (i < parts.length - 1) {
-      const m = flatMetrics(), fs = (size * m.cap) / (m.asc + m.desc), gap = (FLAT_GAP * size) / 15;
-      cx += gap;
-      svg += `<text x="${(cx - m.l * fs).toFixed(2)}" y="${(Number(y) - m.desc * fs).toFixed(2)}" font-size="${fs.toFixed(2)}" fill="${fill}" stroke="${fill}" stroke-width="${((FLAT_BOLD * size) / 15).toFixed(2)}" stroke-linejoin="round">♭</text>`;
-      cx += (m.r - m.l) * fs + gap;
+      const m = flatMetrics(), gap = (FLAT_GAP * size) / 15, target = flatStem() * m.stemI * size;   // target: 目標の棒の太さ(px)
+      let fs = (size * m.cap) / (m.asc + m.desc), w = 0;
+      for (let k = 0; k < 4; k++) { w = Math.max(0, target - m.stem * fs); fs = (size * m.cap - w) / (m.asc + m.desc); }   // 太らせる分、♭を小さくして、外側の高さを保つ
+      w = Math.max(0, target - m.stem * fs);
+      const x0 = cx + gap;
+      svg += `<text x="${(x0 + w / 2 - m.l * fs).toFixed(2)}" y="${(Number(y) - m.desc * fs - w / 2).toFixed(2)}" font-size="${fs.toFixed(2)}" fill="${fill}"${w > 0 ? ` stroke="${fill}" stroke-width="${w.toFixed(2)}" stroke-linejoin="round"` : ""}>♭</text>`;
+      cx = x0 + (m.r - m.l) * fs + w + gap;
     }
   });
   return { svg, end: cx };
