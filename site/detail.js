@@ -32,14 +32,28 @@ function measure(txt, size) {
 // 測るのは、書体の字そのもの(端末ごとに、違う書体でも、同じ方法で揃う)。 測れなかったとき(0や NaN)は、Windows(Yu Gothic)での実測値を使う。
 const FLAT_GAP = 1.0;    // ♭の前後の間隔(15pxの文字のとき。size に比例)
 const FLAT_BOLD = 0.3;   // ♭の線を、縁取りで太らせる量(15pxの文字のとき。size に比例)。 0 だと、周りの太字に比べて細すぎ、0.55 以上だと、膨らみの穴がつぶれる
+// 字の範囲は、measureText の actualBoundingBox ではなく、実際に描いた絵のピクセルから測る。
+// (iPhone の Safari 系では、actualBoundingBoxLeft/Right が、字の範囲ではなく、送り幅いっぱい(0〜100)で返り、余白を削れなかった。 2026-11-22 に、実機で確認)
+function inkBox(ch) {
+  const S = 200, ox = 50, oy = 150;                                   // 100px の字を、(50,150)=左端・ベースライン に描く
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.font = `bold 100px ${FONT}`;
+  g.textBaseline = "alphabetic";
+  g.fillStyle = "#000";
+  g.fillText(ch, ox, oy);
+  const d = g.getImageData(0, 0, S, S).data;
+  let x0 = S, x1 = -1, y0 = S, y1 = -1;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (d[(y * S + x) * 4 + 3] > 64) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return x1 < 0 ? null : { l: (x0 - ox) / 100, r: (x1 + 1 - ox) / 100, asc: (oy - y0) / 100, desc: (y1 + 1 - oy) / 100 };
+}
 let _flat = null;
 function flatMetrics() {
   if (_flat) return _flat;
-  _ctx ??= document.createElement("canvas").getContext("2d");
-  _ctx.font = `bold 100px ${FONT}`;
-  const m = _ctx.measureText("♭"), e = _ctx.measureText("E");
-  const v = { asc: m.actualBoundingBoxAscent / 100, desc: m.actualBoundingBoxDescent / 100, l: -m.actualBoundingBoxLeft / 100, r: m.actualBoundingBoxRight / 100, cap: e.actualBoundingBoxAscent / 100 };
-  const ok = [v.asc, v.desc, v.l, v.r, v.cap].every(Number.isFinite) && v.asc + v.desc > 0.2 && v.r - v.l > 0.05 && v.cap > 0.3;
+  let v = null;
+  try { const b = inkBox("♭"), e = inkBox("E"); if (b && e) v = { asc: b.asc, desc: b.desc, l: b.l, r: b.r, cap: e.asc }; } catch { /* canvas が読めない環境 */ }
+  const ok = v && [v.asc, v.desc, v.l, v.r, v.cap].every(Number.isFinite) && v.asc + v.desc > 0.2 && v.r - v.l > 0.05 && v.r - v.l < 0.9 && v.cap > 0.3;
   return (_flat = ok ? v : { asc: 0.8, desc: 0.04, l: 0.33, r: 0.65, cap: 0.72 });
 }
 // str の ♭ を、上の方法で揃えて、文字と ♭ を、横に並べる。 {svg, end(右端のx)} を返す。 ♭の字は、文字と同じ色で、少しだけ太らせる(FLAT_BOLD)
