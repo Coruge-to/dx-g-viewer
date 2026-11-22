@@ -247,17 +247,52 @@ const VIB_CODE = { N: 0, "A-1": 1, "B-1": 2, "C-1": 3, "A-2": 4, "B-2": 5, "C-2"
 // 元サイトと同じ幅(88)の枠を自前で描き、その中に、公式の波形(assets.js。枠の縁は含まない)を入れる。
 // 公式画像で波が実際に届いている範囲(横10〜105, 縦10〜45: 山と谷は枠の縁に隠れて、ここで切れている)を、自前の枠の線に合わせて拡縮する:
 // 山と谷の端が、枠の線にちょうど重なり、出っ張りも二重線も出ない。
-// 種類の文字(H など)は、枠の内側の右から4px・下端に、薄い暗幕つきで置く
-// true: 元サイトの波形GIF(ラベルの裏でも波が最後まである。元サイトと同じ、少しざらついた線) / false: 公式画像の波形(なめらかな線。ラベルの裏の部分は波が欠ける)
+// 種類の文字(H など)は、枠の内側の右から4px・下端に、縁取りつきで置く(他のラベルと同じ縁取り。波は、文字の周りだけ抜ける)
+// true: 元サイトの波形GIFをなぞった線(知らない種類だけに使う) / false: 公式画像の波形(線が太く、途中が欠けるので、使わない)
 const USE_SITE_WAVE = true;
-const WAVE_DY = 0.3;   // 波を、枠に対して、上へずらす量(px)。上端側の隙間と下端側の隙間を揃えるため (0〜1の間で、小数も使える)
-// ビブラートの波形。元サイトの波形GIF(ラベルの文字を含まない完全な波形。vib_gif.js)を使う。
-// 元サイトに画像が無い A-3 だけは、公式画像の波形(assets.js。枠の縁とラベルの下の部分を除いたもの)で代用する。
-// いずれも、波の上端・下端が、自前の枠の線にちょうど重なるように拡縮する。
-// ラベル(H など)の裏の長方形は半透明なので、波がその裏でも透けて見える。
+const WAVE_DY = 0;   // 波を、枠に対して、上へずらす量(px)。0: 中心18.5が、枠の内側(1.2〜30.8)の中央(16)に、ちょうど来る。 (GIFをなぞった線の頃は、0.3だった)
+// ビブラートの波形は、元サイトの波形GIF(折れや不ぞろいがある)に「中心線 + 振幅 x 正弦波」を当てはめて、規則で作り直す(誤差0.2〜0.5px)。
+// 座標は、GIFの座標(幅89・高さ37、中心18.5)。左端は、谷(画面の下)から始まり、右端は、山で終わる(180度回しても同じ形: 点対称)。
+//   A-1〜C-3: 文字(A/B/C)が周期(枠の中に 6.5 / 4.5 / 3.5 周)。 数字(1/2/3)が振幅 5.4 / 10.8 / 16.4。 (GIFの無い A-3 も、ここで作れる)
+//   N: 直線。 D: 中心線が上昇(振幅 8.2)。 E: 中心線が下降(振幅 8.2)。 D〜H の周期は、B と同じ(4.5周)。
+//   F: 振幅が 16.4(最初の山と谷まで) → 8.2 に縮む。 G: F を180度回した形(8.2 → 16.4(最後の山と谷))。
+//   H: ひし形(振幅が 5.4 → 16.4(真ん中の山と谷) → 5.4。上下対称)。
+// 振幅の上限 16.4: 枠の内側(1.2〜30.8)に、線(太さ2.2)が触れない限界。 中心18.5から、上下に 16.46(波の上端・下端が、枠から1.1+1.2離れる)。
+// 実測(GIF)は 16.9 まであったが、枠に触れるので、全体を 16.4/16.9 に縮めた(比率は、そのまま)。 小さい側の 8.2 は 16.4 の半分、H の端の 5.4 は A-1 の振幅。
+const WAVE_X0 = 0.45, WAVE_X1 = 88.5, WAVE_SPAN = WAVE_X1 - WAVE_X0;
+const WAVE_ABC = { period: { A: WAVE_SPAN / 6.5, B: WAVE_SPAN / 4.5, C: WAVE_SPAN / 3.5 }, amp: { 1: 5.4, 2: 10.8, 3: 16.4 } };
+const waveCache = {};
+function cleanWave(label) {
+  if (label in waveCache) return waveCache[label];
+  let T = WAVE_ABC.period.B, amp = () => 0, ctr = () => 18.5;       // u: 0〜1(左端〜右端)、x: GIFの座標
+  let shape = (x) => Math.cos((2 * Math.PI * (x - WAVE_X0)) / T);   // 波の形(-1〜1)。左端は、谷(画面の下)から始まる
+  const m = /^([ABC])-([123])$/.exec(label);
+  if (m) { T = WAVE_ABC.period[m[1]]; const a = WAVE_ABC.amp[m[2]]; amp = () => a; }
+  else if (label === "D") { amp = () => 8.2; ctr = (u) => 26.7 - 16.4 * u; }      // 中心線の動き 16.4: 上端 2.1 〜 下端 34.9 (限界 2.04〜34.96)
+  else if (label === "E") { amp = () => 8.2; ctr = (u) => 10.3 + 16.4 * u; }
+  else if (label === "F" || label === "G") {
+    // 最初(Gは最後)の山と谷を、どちらも 16.4 にするため、半周期の間は、振幅を 16.4 のままにして、そのあと 8.2 まで、直線で縮める。G は、F を左右に反転(180度回転)
+    const P = T / 2, F = (x) => (x <= WAVE_X0 + P ? 16.4 : 16.4 - (8.2 * (x - WAVE_X0 - P)) / (WAVE_SPAN - P));
+    amp = label === "F" ? (u, x) => F(x) : (u, x) => F(WAVE_X0 + WAVE_X1 - x);
+  }
+  else if (label === "H") {
+    // ひし形。真ん中(xc)を、波が中心線を横切る位置にして、その両側の山と谷を、同じ高さ(16.4。C-3と同じ)にする(上下対称)。
+    // 包絡線の頂点は、xcにあり、山と谷(xcの両側 T/4)より少し高い(波は、そこを描かない)。
+    const xc = (WAVE_X0 + WAVE_X1) / 2, L = WAVE_SPAN / 2, EDGE = 5.4, r = T / 4 / L, top = (16.4 - EDGE * r) / (1 - r);
+    amp = (u, x) => top - (top - EDGE) * (Math.abs(x - xc) / L);
+    shape = (x) => -Math.sin((2 * Math.PI * (x - xc)) / T);        // 左端は谷から始まり、右端は山で終わる
+  }
+  else if (label !== "N") return (waveCache[label] = null);       // 知らない種類は、GIFの形(VIBG)のまま
+  const pts = [];
+  for (let i = 0; i <= 352; i++) {                                 // 右端(X1)が、ちょうど最後の点になるように、352等分
+    const x = WAVE_X0 + (i * WAVE_SPAN) / 352, u = (x - WAVE_X0) / WAVE_SPAN;
+    pts.push(+x.toFixed(2), +(ctr(u) + amp(u, x) * shape(x)).toFixed(2));
+  }
+  return (waveCache[label] = { w: 89, h: 37, p: pts });
+}
 function vibratoSVG(type, p, x0, y0) {
   const BW = 88, BH = 32, label = String(type || "N"), tw = measure(label, 14);
-  const g = USE_SITE_WAVE ? VIBG[label] : null;
+  const g = cleanWave(label) ?? (USE_SITE_WAVE ? VIBG[label] : null);
   let wave;
   if (g) {
     const sx = (BW - 1.2) / g.w, sy = (BH - 1.2) / g.h, n2 = (v) => v.toFixed(2).replace(/\.?0+$/, "");
@@ -282,8 +317,7 @@ function vibratoSVG(type, p, x0, y0) {
   return `<g transform="translate(${f(x0)} ${f(y0)})">
     <rect x=".6" y=".6" width="${BW - 1.2}" height="${BH - 1.2}" rx="4" fill="none" stroke="#00ff00" stroke-width="1.2"/>
     ${wave}
-    <rect x="${f(BW - 5 - tw - 2)}" y="${f(BH - 16.5)}" width="${f(tw + 4)}" height="12.5" fill="rgba(34,34,34,.5)"/>
-    <text x="${BW - 5}" y="${f(BH - 5.5)}" font-size="14" text-anchor="end" fill="#ffffff">${esc(label)}</text></g>`;
+    ${T(BW - 5, BH - 5.5, label, { size: 14, anchor: "end", stroke: BG })}</g>`;
 }// ---------- 右: 同じ曲の推移 ----------
 const SERIES = [
   { name: "総合点", color: "#ff8a8a", shape: "circle", get: (r) => num(r.totalPoint) },
