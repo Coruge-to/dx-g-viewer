@@ -256,6 +256,12 @@ function renderSpHeader(st) {
 // スマホの表の点数(98.927 など)を、セルの真ん中に、見た目で揃える。
 // text-align:center は、字の送り幅で中央に置くので、先頭の字の左の空きと、末尾の字の右の空きの差だけ、描かれる数字が、左右にずれる(iPhoneで、約0.35px、左に寄って見えた。2026-11-23)。
 // そこで、各字(0〜9 と .)の左右の空きを、canvasに大きく(100px)描いて、ピクセルから測り(measureText の範囲は、iPhone では使えない)、その差の分だけ、余白で寄せる。
+// 目の錯覚の補正(px)。 ピクセルでは、ぴったり中央でも、「98.927」は、点(.)の前が2桁・後が3桁で、左に寄って見えたので、さらに、右へ、この分だけ寄せる(中心の移動量)。 0 で、補正なし
+// iPhone の実機で、0 / 0.1 / 0.2 / 0.3 / 0.4 を並べて比べ、0.3 に決めた(2026-11-23)
+const SCORE_OPTICAL_SHIFT = 0.3;
+// 7桁(100.000)のときの字間(px)。 viewer.css の .score-100 の letter-spacing と、同じ値にする。
+// 字間は、末尾の字の後ろにも付くので、箱が、その分だけ短くなり、描かれる数字が、箱の中心より、(その半分)右へずれる。 centerPad の結果に、この値を足して、戻す
+const SCORE_100_LS = -0.7;
 const _glyphInset = {};
 function glyphInset(ch) {
   if (ch in _glyphInset) return _glyphInset[ch];
@@ -298,7 +304,7 @@ function renderSpBody(rows, st, offset) {
       const cntCell = st.mode === "best" ? '<span class="sp-cnt-val">' + fmt(r.sing_count) + "</span>" : "";   // 曲別最高点だけ
       const W = SP_NUM_SLOT_WIDTH;
       const scoreText = fmt(r.total_score, 3);   // 通常は6桁(98.263)。 7桁(100.000)のときだけ、字間を詰める(.score-100)
-      const cp = centerPad(scoreText, 12);       // 点数は12px。 描かれる数字を、セルの中央に、見た目で揃える(上の centerPad)
+      const cp = centerPad(scoreText, 12) + (scoreText.length > 6 ? SCORE_100_LS : 0) + 2 * SCORE_OPTICAL_SHIFT;   // 点数は12px。 描かれる数字を、セルの中央に、見た目で揃える(上の centerPad)。 余白 p で、中心が p/2 動くので、中心を e 動かすには、2e の余白
       const scorePad = cp >= 0 ? "padding-left:" + cp.toFixed(2) + "px;" : "padding-right:" + (-cp).toFixed(2) + "px;";
       const row1 =
         '<tr class="record-top">'

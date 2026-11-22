@@ -559,7 +559,7 @@ section.main > div.block-container,
 
   /* 点数: 通常は6桁(98.263)で、12px・字間は詰めない。 7桁(100.000)のときだけ、字間を詰めて、列(約45〜53px)に収める(.score-100。viewer.js が付ける) */
   .sp-body-table .score-cell { font-size: 12px !important; letter-spacing: 0; }
-  .sp-body-table .score-cell.score-100 { letter-spacing: -0.7px; }
+  .sp-body-table .score-cell.score-100 { letter-spacing: -0.7px; }   /* viewer.js の SCORE_100_LS と、同じ値(中央揃えの補正に使う) */
 
   .sp-header-table .sort-link { padding: 1px 2px !important; font-size: 11px; line-height: 1.15; }
   .sp-no-label { padding: 1px 4px !important; line-height: 1.15; }
