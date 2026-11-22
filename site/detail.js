@@ -86,7 +86,27 @@ function textWithFlats(x, y, str, size, fill) {
   });
   return { svg, end: cx };
 }
-const LABEL_GAP = 3;   // 黄色い小さなラベル(合計・タイプ・キー)と、白い値の間の余白(px)。 隙間なしだと、「計6.1」「プボックス」「ー±0」が、くっついて見えた
+// 黄色い小さなラベル(合計・タイプ・キー)と、白い値の間の余白(px)。 隙間なしだと、「計6.1」「プボックス」「ー±0」が、くっついて見えた。
+// 決め方(2026-11-23、ユーザーの定義): 下段の左の項目(安定性の「まっすぐ」)の右端と、その下の青線の右端の余白 m(ほぼ無い。いまは -1px)を、
+// 「タイプ ボックス型」(タイプの値で最長の5文字)の「型」の右端と、右の青線の右端の余白に、等しくする。 そのときの「プ」と「ボ」の間の余白を、3か所に使う。
+// 座標は、下の描画と同じ値: 左の青線 10〜216、「まっすぐ」の x=173(11px)、右の青線 225〜440、「タイプ」の x=338(11px)・値は 13px
+let _labelGap = null;
+function labelGap() {
+  if (_labelGap === null) {
+    const m = 216 - (173 + measure("まっすぐ", 11));
+    _labelGap = Math.max(0, 440 - m - (338 + measure("タイプ", 11) + measure("ボックス型", 13)));
+  }
+  return _labelGap;
+}
+// 音程・表現力の行(正確率〜フォール)の、ラベル ⇔ 数値 ⇔ 単位の間の余白(2026-11-23、ユーザーの定義)。 labelGap(5px)では、やり過ぎだった。
+// 一番右の項目「フォール N回」(N は1桁。x=358 から)の、「回」の右端が、グラフの右端に、ちょうど合う間隔にする。
+// グラフの右端 = sectionSVG の x0 + W - Rm = 11 + 420 - 6 = 425(目盛りの線の右端)
+const STAT_RIGHT = 425;
+let _statGap = null;
+function statGap() {
+  if (_statGap === null) _statGap = Math.max(0, (STAT_RIGHT - 358 - (measure("フォール", 11) + measure("0", 15) + measure("回", 11))) / 2);
+  return _statGap;
+}
 // キーの表記: 保管庫の全角の ＋ ・ － を、半角の + ・ − (U+2212。+ と同じ幅の、本物のマイナス)にそろえる(±0 は、もともと半角)
 const keyText = (k) => String(k ?? "±0").replace(/＋/g, "+").replace(/[－-]/g, "−");
 const NO_HEAD = "、。，．）」』】！？ー・ぁぃぅぇぉっゃゅょ)>＞〉》]"; // 行頭に来ないようにする文字 (簡易の禁則処理)
@@ -479,14 +499,19 @@ export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
 
   // 音程・表現力
   y += 9 + 19;
-  s += `<text x="11" y="${f(y)}" font-size="15" fill="${WHITE}">音程 <tspan font-size="11" fill="${YEL}" dx="8">正確率</tspan><tspan font-size="15" fill="${WHITE}">${num(r.radarChartPitch)}</tspan><tspan font-size="11" fill="${YEL}">%</tspan></text>`;
+  const G = statGap();   // ラベル ⇔ 数値 ⇔ 単位(%・点・回)の間の余白。 合計・タイプ・キー(labelGap)より、小さい
+  s += `<text x="11" y="${f(y)}" font-size="15" fill="${WHITE}">音程<tspan font-size="11" fill="${YEL}" dx="${labelGap()}">正確率</tspan><tspan font-size="15" fill="${WHITE}" dx="${G}">${num(r.radarChartPitch)}</tspan><tspan font-size="11" fill="${YEL}" dx="${G}">%</tspan></text>`;
   y += 18;
-  const m = (x, label, val, unit, big) => `<text x="${x}" y="${f(y)}" font-size="11" fill="${YEL}">${label ? `<tspan font-size="${big ? 15 : 15}" fill="${WHITE}">${label}</tspan> ` : ""}<tspan font-size="15" fill="${WHITE}">${val}</tspan><tspan font-size="11" fill="${YEL}">${unit}</tspan></text>`;
-  s += `<text x="11" y="${f(y)}" font-size="15" fill="${WHITE}">表現力 <tspan>${num(r.radarChartExpressive)}</tspan><tspan font-size="11" fill="${YEL}">点</tspan></text>`;
-  s += `<text x="114" y="${f(y)}" font-size="11" fill="${YEL}">抑揚<tspan font-size="15" fill="${WHITE}">${num(r.intonation)}</tspan>点</text>`;
-  s += `<text x="191" y="${f(y)}" font-size="11" fill="${YEL}">しゃくり<tspan font-size="15" fill="${WHITE}">${num(r.shakuriCount)}</tspan>回</text>`;
-  s += `<text x="281" y="${f(y)}" font-size="11" fill="${YEL}">こぶし<tspan font-size="15" fill="${WHITE}">${num(r.kobushiCount)}</tspan>回</text>`;
-  s += `<text x="358" y="${f(y)}" font-size="11" fill="${YEL}">フォール<tspan font-size="15" fill="${WHITE}">${num(r.fallCount)}</tspan>回</text>`;
+  // 項目: ラベル(黄・11px。表現力だけ白・15px) + 数値(白・15px) + 単位(黄・11px)。 ラベルと数値、数値と単位の間に、G の余白
+  const unitSpan = (u) => `<tspan font-size="11" fill="${YEL}" dx="${G}">${u}</tspan>`;
+  s += `<text x="11" y="${f(y)}" font-size="15" fill="${WHITE}">表現力<tspan dx="${G}">${num(r.radarChartExpressive)}</tspan>${unitSpan("点")}</text>`;
+  const item = (x, label, val, unit) => `<text x="${f(x)}" y="${f(y)}" font-size="11" fill="${YEL}">${label}<tspan font-size="15" fill="${WHITE}" dx="${G}">${val}</tspan>${unitSpan(unit)}</text>`;
+  s += item(114, "抑揚", num(r.intonation), "点");
+  s += item(191, "しゃくり", num(r.shakuriCount), "回");
+  s += item(281, "こぶし", num(r.kobushiCount), "回");
+  // フォールは、いちばん右。 1桁のときは、x=358 のまま(「回」の右端が、グラフの右端に合う)。 2桁(10回など)のときだけ、グラフの右端(x=425)に合わせて、左へずらす
+  const fallW = measure("フォール", 11) + G + measure(String(num(r.fallCount)), 15) + G + measure("回", 11);
+  s += item(Math.min(358, STAT_RIGHT - fallW), "フォール", num(r.fallCount), "回");
   const secY = y + 8;
   s += sectionSVG(r, 11, secY, 420, 71, p);
   y += 8 + 71 + 10;
@@ -508,14 +533,14 @@ export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
   const cv = (S0 + 2 + line2) / 2, rv1 = cv - 20, rv2 = cv, rv3 = cv + 20;
   s += T(225, base(rv1, 14), "ビブラート", { size: 14 });
   s += T(225, base(rv2, 11), "上手さ", { size: 11, fill: YEL }) + diamondsSVG(r.vibratoSkill, p, 264, rv2 - 5.5);
-  s += `<text x="225" y="${f(rv3 + 4.5)}" font-size="11" fill="${YEL}">合計<tspan font-size="13" fill="${WHITE}" dx="${LABEL_GAP}">${esc(r.vibratoTotalSecond)}秒</tspan> <tspan font-size="13" fill="${WHITE}">${num(r.vibratoCount)}回</tspan></text>`;
-  s += `<text x="338" y="${f(rv3 + 4.5)}" font-size="11" fill="${YEL}">タイプ<tspan font-size="13" fill="${WHITE}" dx="${LABEL_GAP}">${esc(r.vibratoTypeText || "")}</tspan></text>`;
+  s += `<text x="225" y="${f(rv3 + 4.5)}" font-size="11" fill="${YEL}">合計<tspan font-size="13" fill="${WHITE}" dx="${labelGap()}">${esc(r.vibratoTotalSecond)}秒</tspan> <tspan font-size="13" fill="${WHITE}">${num(r.vibratoCount)}回</tspan></text>`;
+  s += `<text x="338" y="${f(rv3 + 4.5)}" font-size="11" fill="${YEL}">タイプ<tspan font-size="13" fill="${WHITE}" dx="${labelGap()}">${esc(r.vibratoTypeText || "")}</tspan></text>`;
   s += vibratoSVG(r.vibratoType || "N", p, 338, (rv1 + rv2) / 2 - 16);
   s += `<rect x="225" y="${f(line2)}" width="215" height="1" fill="#2a4aa8" opacity=".75"/>`;
   {   // 音域 m2A♭～hiD♭ キー±0。 ♭は、書体の字(全角で浮く・端末で形が変わる)ではなく、自前の図形で描く。 位置は、文字の幅を測って、順に決める
     const y = f(c3 + 5.5), range = textWithFlats(225 + measure("音域 ", 15) + 8, y, `${r.singingRangeLowest}～${r.singingRangeHighest}`, 15, WHITE);
     const kx = range.end + 10;
-    s += `<text x="225" y="${y}" font-size="15" fill="${WHITE}">音域</text>${range.svg}<text x="${f(kx)}" y="${y}" font-size="11" fill="${YEL}">キー</text><text x="${f(kx + measure("キー", 11) + LABEL_GAP)}" y="${y}" font-size="15" fill="${WHITE}">${esc(keyText(r.lastPerformKey))}</text>`;
+    s += `<text x="225" y="${y}" font-size="15" fill="${WHITE}">音域</text>${range.svg}<text x="${f(kx)}" y="${y}" font-size="11" fill="${YEL}">キー</text><text x="${f(kx + measure("キー", 11) + labelGap())}" y="${y}" font-size="15" fill="${WHITE}">${esc(keyText(r.lastPerformKey))}</text>`;
   }
   const leftH = bottom + 7.5;                                       // 画像の下端。最下段の文字・図形の下端〜画像の下端の余白を、上端〜曲名の余白(13.5px)に揃える
   // 右(同じ曲の推移)

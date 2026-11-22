@@ -253,6 +253,31 @@ function renderSpHeader(st) {
   return '<table class="dxg-table sp-header-table">' + colgroup(SP_COL_WIDTHS) + "<thead><tr>" + cells.join("") + "</tr></thead></table>";
 }
 
+// スマホの表の点数(98.927 など)を、セルの真ん中に、見た目で揃える。
+// text-align:center は、字の送り幅で中央に置くので、先頭の字の左の空きと、末尾の字の右の空きの差だけ、描かれる数字が、左右にずれる(iPhoneで、約0.35px、左に寄って見えた。2026-11-23)。
+// そこで、各字(0〜9 と .)の左右の空きを、canvasに大きく(100px)描いて、ピクセルから測り(measureText の範囲は、iPhone では使えない)、その差の分だけ、余白で寄せる。
+const _glyphInset = {};
+function glyphInset(ch) {
+  if (ch in _glyphInset) return _glyphInset[ch];
+  let v = { l: 0, r: 0 };
+  try {
+    const S = 300, ox = 100, oy = 200;
+    const c = document.createElement("canvas"); c.width = c.height = S;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.font = '100px Arial, "Yu Gothic", sans-serif'; g.textBaseline = "alphabetic"; g.fillStyle = "#000"; g.fillText(ch, ox, oy);
+    const d = g.getImageData(0, 0, S, S).data;
+    let x0 = S, x1 = -1;
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (d[(y * S + x) * 4 + 3] > 32) { if (x < x0) x0 = x; if (x > x1) x1 = x; }
+    if (x1 >= 0) v = { l: (x0 - ox) / 100, r: (ox + g.measureText(ch).width - (x1 + 1)) / 100 };   // l: 左の空き / r: 右の空き (em)
+  } catch { /* canvas が読めない環境は、寄せない */ }
+  return (_glyphInset[ch] = v);
+}
+// text の描かれる数字を、中央に寄せるための余白(px)。 正: 左の余白(右へ寄せる) / 負: 右の余白(左へ寄せる)。 余白 p で、中心が p/2 動くので、空きの差(r - l)そのものを、余白にする
+function centerPad(text, size) {
+  const s = String(text);
+  if (!s) return 0;
+  return (glyphInset(s[s.length - 1]).r - glyphInset(s[0]).l) * size;
+}
 function renderSpBody(rows, st, offset) {
   const parts = ['<table class="dxg-table sp-body-table">' + colgroup(SP_COL_WIDTHS) + "<tbody>"];
   if (!rows.length) {
@@ -273,10 +298,12 @@ function renderSpBody(rows, st, offset) {
       const cntCell = st.mode === "best" ? '<span class="sp-cnt-val">' + fmt(r.sing_count) + "</span>" : "";   // 曲別最高点だけ
       const W = SP_NUM_SLOT_WIDTH;
       const scoreText = fmt(r.total_score, 3);   // 通常は6桁(98.263)。 7桁(100.000)のときだけ、字間を詰める(.score-100)
+      const cp = centerPad(scoreText, 12);       // 点数は12px。 描かれる数字を、セルの中央に、見た目で揃える(上の centerPad)
+      const scorePad = cp >= 0 ? "padding-left:" + cp.toFixed(2) + "px;" : "padding-right:" + (-cp).toFixed(2) + "px;";
       const row1 =
         '<tr class="record-top">'
         + '<td class="meta-cell"><div class="sp-nodate-row"><span class="sp-no-num">' + (offset + i + 1) + "</span>" + dateLink + cntCell + "</div></td>"
-        + '<td rowspan="3" class="score-cell' + (scoreText.length > 6 ? " score-100" : "") + '" data-sid="' + esc(r.score_id) + '" style="background:' + bg + ';">' + scoreText + "</td>"
+        + '<td rowspan="3" class="score-cell' + (scoreText.length > 6 ? " score-100" : "") + '" data-sid="' + esc(r.score_id) + '" style="background:' + bg + ";" + scorePad + '">' + scoreText + "</td>"
         + "<td>" + numSlot(fmt(r.base_score, 3), W.base_score) + "</td>"
         + "<td>" + numSlot(fmt(r.chart_total), W.chart_total) + "</td>"
         + "<td>" + numSlot(fmt(r.pitch), W.pitch) + "</td>"
