@@ -272,10 +272,11 @@ function renderSpBody(rows, st, offset) {
         : anchor(songHref, esc(sVal), "clip song");
       const cntCell = st.mode === "best" ? '<span class="sp-cnt-val">' + fmt(r.sing_count) + "</span>" : "";   // 曲別最高点だけ
       const W = SP_NUM_SLOT_WIDTH;
+      const scoreText = fmt(r.total_score, 3);   // 通常は6桁(98.263)。 7桁(100.000)のときだけ、字間を詰める(.score-100)
       const row1 =
         '<tr class="record-top">'
         + '<td class="meta-cell"><div class="sp-nodate-row"><span class="sp-no-num">' + (offset + i + 1) + "</span>" + dateLink + cntCell + "</div></td>"
-        + '<td rowspan="3" class="score-cell" data-sid="' + esc(r.score_id) + '" style="background:' + bg + ';">' + fmt(r.total_score, 3) + "</td>"
+        + '<td rowspan="3" class="score-cell' + (scoreText.length > 6 ? " score-100" : "") + '" data-sid="' + esc(r.score_id) + '" style="background:' + bg + ';">' + scoreText + "</td>"
         + "<td>" + numSlot(fmt(r.base_score, 3), W.base_score) + "</td>"
         + "<td>" + numSlot(fmt(r.chart_total), W.chart_total) + "</td>"
         + "<td>" + numSlot(fmt(r.pitch), W.pitch) + "</td>"

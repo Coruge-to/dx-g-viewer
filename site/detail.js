@@ -12,6 +12,8 @@ const YEL = "#ffee33", WHITE = "#ffffff", BG = "#222222";
 let uid = 0;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v, d = 0) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
+// 点数を、小数第3位までそろえる(公式のデータは、文字列で、末尾の0が省略される: "1.1" "1.89" "98.07" "93")。 数値でなければ、そのまま
+const fix3 = (v) => (Number.isFinite(Number(v)) && String(v).trim() !== "" ? Number(v).toFixed(3) : String(v ?? ""));
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const f = (n) => (Math.round(n * 10) / 10).toString();
 
@@ -84,6 +86,7 @@ function textWithFlats(x, y, str, size, fill) {
   });
   return { svg, end: cx };
 }
+const LABEL_GAP = 3;   // 黄色い小さなラベル(合計・タイプ・キー)と、白い値の間の余白(px)。 隙間なしだと、「計6.1」「プボックス」「ー±0」が、くっついて見えた
 // キーの表記: 保管庫の全角の ＋ ・ － を、半角の + ・ − (U+2212。+ と同じ幅の、本物のマイナス)にそろえる(±0 は、もともと半角)
 const keyText = (k) => String(k ?? "±0").replace(/＋/g, "+").replace(/[－-]/g, "−");
 const NO_HEAD = "、。，．）」』】！？ー・ぁぃぅぇぉっゃゅょ)>＞〉》]"; // 行頭に来ないようにする文字 (簡易の禁則処理)
@@ -457,7 +460,7 @@ export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
   // 上段: 得点 + レーダー
   const xr = 232;
   s += T(xr, 49, "", {});
-  const vRaw = `${r.rawPoint}点`, vBonus = `${r.bonusPoint}点`;
+  const vRaw = `${fix3(r.rawPoint)}点`, vBonus = `${fix3(r.bonusPoint)}点`;
   const xv = xr - Math.max(measure(vRaw, 15), measure(vBonus, 15)), xc = xv - 3; // 値の左端 / コロンの右端 (2行で共通)
   s += `<text x="${f(xc)}" y="52" font-size="12" text-anchor="end" fill="${YEL}">素点:</text><text x="${xr}" y="52" font-size="15" text-anchor="end" fill="${WHITE}">${esc(vRaw)}</text>`;
   s += `<text x="${f(xc)}" y="69" font-size="12" text-anchor="end" fill="${YEL}">${esc(r.bonusTypeText || "ボーナス")}ボーナス:</text><text x="${xr}" y="69" font-size="15" text-anchor="end" fill="${WHITE}">${esc(vBonus)}</text>`;
@@ -505,14 +508,14 @@ export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
   const cv = (S0 + 2 + line2) / 2, rv1 = cv - 20, rv2 = cv, rv3 = cv + 20;
   s += T(225, base(rv1, 14), "ビブラート", { size: 14 });
   s += T(225, base(rv2, 11), "上手さ", { size: 11, fill: YEL }) + diamondsSVG(r.vibratoSkill, p, 264, rv2 - 5.5);
-  s += `<text x="225" y="${f(rv3 + 4.5)}" font-size="11" fill="${YEL}">合計<tspan font-size="13" fill="${WHITE}">${esc(r.vibratoTotalSecond)}秒</tspan> <tspan font-size="13" fill="${WHITE}">${num(r.vibratoCount)}回</tspan></text>`;
-  s += `<text x="338" y="${f(rv3 + 4.5)}" font-size="11" fill="${YEL}">タイプ<tspan font-size="13" fill="${WHITE}">${esc(r.vibratoTypeText || "")}</tspan></text>`;
+  s += `<text x="225" y="${f(rv3 + 4.5)}" font-size="11" fill="${YEL}">合計<tspan font-size="13" fill="${WHITE}" dx="${LABEL_GAP}">${esc(r.vibratoTotalSecond)}秒</tspan> <tspan font-size="13" fill="${WHITE}">${num(r.vibratoCount)}回</tspan></text>`;
+  s += `<text x="338" y="${f(rv3 + 4.5)}" font-size="11" fill="${YEL}">タイプ<tspan font-size="13" fill="${WHITE}" dx="${LABEL_GAP}">${esc(r.vibratoTypeText || "")}</tspan></text>`;
   s += vibratoSVG(r.vibratoType || "N", p, 338, (rv1 + rv2) / 2 - 16);
   s += `<rect x="225" y="${f(line2)}" width="215" height="1" fill="#2a4aa8" opacity=".75"/>`;
   {   // 音域 m2A♭～hiD♭ キー±0。 ♭は、書体の字(全角で浮く・端末で形が変わる)ではなく、自前の図形で描く。 位置は、文字の幅を測って、順に決める
     const y = f(c3 + 5.5), range = textWithFlats(225 + measure("音域 ", 15) + 8, y, `${r.singingRangeLowest}～${r.singingRangeHighest}`, 15, WHITE);
     const kx = range.end + 10;
-    s += `<text x="225" y="${y}" font-size="15" fill="${WHITE}">音域</text>${range.svg}<text x="${f(kx)}" y="${y}" font-size="11" fill="${YEL}">キー</text><text x="${f(kx + measure("キー", 11))}" y="${y}" font-size="15" fill="${WHITE}">${esc(keyText(r.lastPerformKey))}</text>`;
+    s += `<text x="225" y="${y}" font-size="15" fill="${WHITE}">音域</text>${range.svg}<text x="${f(kx)}" y="${y}" font-size="11" fill="${YEL}">キー</text><text x="${f(kx + measure("キー", 11) + LABEL_GAP)}" y="${y}" font-size="15" fill="${WHITE}">${esc(keyText(r.lastPerformKey))}</text>`;
   }
   const leftH = bottom + 7.5;                                       // 画像の下端。最下段の文字・図形の下端〜画像の下端の余白を、上端〜曲名の余白(13.5px)に揃える
   // 右(同じ曲の推移)
@@ -644,7 +647,7 @@ function attachHover(wrap, img, hot, zoom) {
       const Yf = (v) => g.y0 + g.T0 + (1 - (clamp(v, g.yMin, g.yMax) - g.yMin) / (g.yMax - g.yMin)) * g.ph;
       panels.song.hl.innerHTML = SERIES.map((se) => halo(se.shape, px, Yf(se.get(play)), se.color)).join("");
       // 総合点・素点は、小数第3位まで出す(保管庫は、末尾の0を省いた形(95.2 など)なので、95.200 にそろえる)
-      const p3 = (v) => (Number.isFinite(Number(v)) && String(v).trim() !== "" ? Number(v).toFixed(3) : String(v));
+      const p3 = fix3;
       const val = (se) => (se.name === "総合点" ? p3(play.totalPoint) : se.name === "素点" ? p3(play.rawPoint) : se.get(play));
       return show(panels.song, `<div class="t">${esc(md(play.scoringDateTime))}</div>` + SERIES.map((se) => row(se.name, se.color, val(se))).join(""), SERIES[0].color, px, g.y0 + g.T0 + g.ph * 0.45);
     }
