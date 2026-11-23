@@ -427,16 +427,34 @@ function songGeom(plays, W, H) {
   const tall = H >= 350;
   const L = 53, Rm = tall ? 24 : 12, T0 = tall ? 68 : 22, axisY = H - (tall ? 101 : 84), pw = W - L - Rm, ph = axisY - T0;
   const all = plays.flatMap((r) => SERIES.map((s) => s.get(r))).filter((v) => v > 0);
-  const lo = Math.max(0, Math.min(...all)), yMin = Math.min(Math.floor(lo) - 1, 94), yMax = 100;
-  return { tall, L, Rm, T0, axisY, pw, ph, yMin, yMax, W, H, n: plays.length };
+  const lo = Math.max(0, Math.min(...all)), yMax = 100;
+  // 縦軸の下端: いちばん低い点と、下の線(横軸)のあいだに、Y_BOTTOM_GAP だけ余白を取る(点の印が、線に重ならないように)。
+  // (lo - yMin) / (yMax - yMin) * ph >= Y_BOTTOM_GAP を、yMin について解いた値。ただし、94 より上にはしない。0 より下にもしない
+  let yMin = Math.max(0, Math.min(Math.floor((lo - (yMax * Y_BOTTOM_GAP) / ph) / (1 - Y_BOTTOM_GAP / ph)), 94));
+  // 縦軸の目盛りの刻み: 基本は5点おき。5点おきの間隔が Y_LABEL_MIN_GAP より狭くなるとき(最低点が低い曲)だけ、10点おきにする。
+  // 10点おきが上限(最低点が3点のような極端な曲でも、スマホ版で間隔は約16。文字の高さ13より広いので、重ならない)
+  const stepFor = (m) => ((ph * 5) / (yMax - m) < Y_LABEL_MIN_GAP ? 10 : 5);
+  // いちばん下の目盛りの線が、下の線(横軸)に、近すぎる(くっつく・二重に見える)と見栄えが悪いので、
+  // 下端は、目盛りの位置(刻みの倍数)に、そろえる。そのとき、横軸の線と、いちばん下の目盛りの線は、重なる(ラベルが、横軸の線の高さに来る)。
+  // 下端が94(上限)の曲は、そろえない(いちばん下の目盛り(95)が、横軸から十分に離れているため)。
+  // 下端が変わると、範囲が変わって、刻みが変わることがあるので、数回、繰り返す
+  for (let i = 0; i < 3 && yMin > 0 && yMin < 94; i++) {
+    const s = stepFor(yMin), snapped = Math.floor(yMin / s) * s;
+    if (snapped === yMin) break;
+    yMin = snapped;
+  }
+  const yStep = stepFor(yMin);
+  return { tall, L, Rm, T0, axisY, pw, ph, yMin, yMax, yStep, W, H, n: plays.length };
 }
+const Y_BOTTOM_GAP = 6;       // いちばん低い点と、下の線(横軸)の、最小の間隔(画像の座標。点の印の半径は4〜5)
+const Y_LABEL_MIN_GAP = 18;  // 縦軸の目盛りの間隔の下限(CSS px)。文字の高さ(13px)より、少し広く
 
 function songChartSVG(plays, currentId, x0, y0, W, H, p = "", cx = W / 2) {   // cx: 凡例を左右中央に揃える位置(このグラフの左端からの距離)
-  const { tall, L, Rm, T0, axisY, pw, ph, yMin, yMax } = songGeom(plays, W, H);
+  const { tall, L, Rm, T0, axisY, pw, ph, yMin, yMax, yStep } = songGeom(plays, W, H);
   const Y = (v) => T0 + (1 - (clamp(v, yMin, yMax) - yMin) / (yMax - yMin)) * ph;
   const n = plays.length, X = (i) => L + ((i + 0.5) / n) * pw;
   let s = `<g transform="translate(${f(x0)} ${f(y0)})">`;
-  for (let v = Math.ceil(yMin / 5) * 5; v <= yMax; v += 5) {
+  for (let v = Math.ceil(yMin / yStep) * yStep; v <= yMax; v += yStep) {
     s += `<line x1="${L}" y1="${f(Y(v))}" x2="${W - Rm}" y2="${f(Y(v))}" stroke="#d8d8d8" stroke-width="1" opacity=".9"/>`;
     s += T(L - 15, Y(v) + 4.5, String(v), { size: 13, anchor: "end" });
   }
