@@ -469,7 +469,10 @@ function renderNav(st) {
   const tabBest = anchor("?best", "曲別最高点", act("best"));
   const tabOther = anchor("?stats", "その他集計", act("stats"));
   const showSearch = st.mode !== "stats";        // 「その他集計」には、検索する対象が無いので、検索欄(PC・スマホとも)を出さない
-  const searchChecked = st.search ? 'checked="checked"' : "";
+  // スマホ版の検索欄は、いつも、閉じた状態で始める(2026-11-24)。以前は、検索語があると開いていたため、
+  // 検索して Enter を押すと、欄が出たままになり、閉じた後に並べ替えると、また開いていた(検索語はアドレスに残るので)。
+  // 検索語は、🔍を押して欄を開けば、入力欄に残っている
+  const searchChecked = "";
   return (
     '<div class="custom-nav">'
     + '<div class="nav-brand">精密集計DX-G</div>'
