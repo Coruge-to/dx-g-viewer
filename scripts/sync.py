@@ -38,8 +38,11 @@ def log(msg: str) -> None:
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess:
     env = dict(os.environ, PYTHONUTF8="1", GIT_TERMINAL_PROMPT="0")
+    # Windows: タスクは pythonw.exe(窓なし)で動くが、そこから git.exe(コンソールのプログラム)を呼ぶと、呼ぶたびに黒い窓が一瞬出る。
+    # CREATE_NO_WINDOW で、窓を作らない(git が、さらに呼ぶ子のプロセスも、同じ隠れたコンソールを使うので、出ない)
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", env=env)
+                          errors="replace", env=env, creationflags=flags)
 
 
 def is_data_only(sha: str) -> bool:
