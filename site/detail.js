@@ -620,8 +620,31 @@ export async function renderDetailPNG(record, all, opts = {}) {
 
 // ---------- 開く / 閉じる ----------
 let overlay = null, objUrl = null, staticUrl = null, openToken = 0;
+// 開いている間に、画面の幅が変わったとき(PC⇔スマホの切り替え・端末の回転・窓の大きさの変更)に、作り直すための控え
+let current = null;     // いま開いている画面の { record, all, opts, layout, zoom }
+let stale = null;       // 作り直しの間、画面に残しておく、前の画面(新しい画面が出たら消す)
+let resizeTimer = 0;
+// PC用とスマホ用の境目は、表の切り替え(viewer.css の @media の 1000px)と、同じ(2026-11-26に、900から1000へ。900〜999pxで、表はスマホ版なのに、この画面はPC用になっていた)
+const autoLayout = () => (window.matchMedia("(min-width: 1000px)").matches ? "wide" : "narrow");
+function dropStale() {
+  if (!stale) return;
+  stale.overlay.remove();
+  stale.urls.forEach((u) => u && URL.revokeObjectURL(u));
+  stale = null;
+}
+function onResize() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!current || (window.visualViewport?.scale ?? 1) > 1.01) return;   // 指で拡大して見ている間は、作り直さない
+    const layout = current.opts.layout ?? autoLayout();
+    if (layout === current.layout && Math.abs(displayZoom(layout) - current.zoom) < 0.005) return;   // 見え方が変わらない(高さだけの変化など)
+    openDetail(current.record, current.all, { ...current.opts, replace: true, animate: false });
+  }, 150);
+}
 export function closeDetail() {
   openToken++;                                    // 動きの途中で閉じられたとき、続きの処理を止める
+  current = null; clearTimeout(resizeTimer); window.removeEventListener("resize", onResize);
+  dropStale();
   overlay?.remove(); overlay = null;
   if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
   if (staticUrl) { URL.revokeObjectURL(staticUrl); staticUrl = null; }
@@ -771,11 +794,18 @@ function playIntro(svgEl, anim, cancelled) {
 // 構造: 下の層 = 動かさない部分(文字・点数・メーター・目盛りなど)を、最終の画像と同じ方法で作った静止画像 / 上の層 = 動く部分(レーダー・折れ線)だけを画面のSVGで重ねる。
 // 動きが終わったら、完成した画像に差し替える。文字は最初から最後まで同じ静止画像なので、切り替わっても位置がずれない。
 export async function openDetail(record, all, opts = {}) {
-  closeDetail();
+  if (opts.replace && overlay) {
+    // 作り直し: 前の画面は、新しい画面が出るまで、残しておく(閉じて開き直すと、一瞬消えて見える)。裏のページのスクロール停止は、そのまま
+    if (stale) { overlay.remove(); [objUrl, staticUrl].forEach((u) => u && URL.revokeObjectURL(u)); }   // 作りかけの画面は捨てる
+    else stale = { overlay, urls: [objUrl, staticUrl] };
+    overlay = null; objUrl = null; staticUrl = null;
+  } else closeDetail();
   const token = ++openToken;
-  const layout = opts.layout ?? (window.innerWidth < 900 ? "narrow" : "wide");
+  const layout = opts.layout ?? autoLayout();
   const { svg, width, height, hot, anim } = buildDetailSVG(record, all, { layout });
   const zoom = displayZoom(layout);
+  current = { record, all, opts: { ...opts, replace: false }, layout, zoom };
+  window.addEventListener("resize", onResize);
   const scale = opts.scale ?? Math.max(2, Math.ceil(zoom * (window.devicePixelRatio || 1)));
   const px = `${Math.round(width * zoom)}px`;
   overlay = document.createElement("div");
@@ -793,7 +823,7 @@ export async function openDetail(record, all, opts = {}) {
   // 背景は透明にするだけで、画面全体を覆う枠(overlay)は、開いた直後からある(待つあいだに、裏の表を、うっかり押さないように)
   btn.style.visibility = "hidden";
   overlay.style.background = "transparent";
-  const showBtn = () => { btn.style.visibility = ""; overlay.style.background = ""; };
+  const showBtn = () => { btn.style.visibility = ""; overlay.style.background = ""; dropStale(); };
   const mkImg = (url, alt) => { const i = new Image(); i.className = "dd-img"; i.alt = alt; i.style.width = px; i.src = url; return i; };
   wrap.append(btn);
   overlay.appendChild(wrap);
