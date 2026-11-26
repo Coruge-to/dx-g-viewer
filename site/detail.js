@@ -686,9 +686,10 @@ function onKey(e) { if (e.key === "Escape") closeDetail(); }
 function displayZoom(layout) {
   const vw = window.innerWidth;
   if (layout === "narrow") return Math.min(1, (vw - 16) / 450);
-  if (vw >= 1450) return 1.5;
-  if (vw >= 1250) return 1.3;
-  return Math.min(1, (vw - 16) / 900);
+  if (vw < 1000) return Math.min(1, (vw - 16) / 900);
+  // 幅に合わせて、なめらかに大きくする(左右の余白を、50pxずつに保つ)。幅1000pxで1倍、1450px以上で1.5倍(上限)。
+  // 以前は、1250px・1450pxで、1.3倍・1.5倍に段階的に切り替えていた(窓の幅を引っ張ると、小→中→大と飛んで見えた)
+  return Math.min(1.5, (vw - 100) / 900);
 }
 
 // ---------- クリック(タップ)したときの吹き出し ----------
