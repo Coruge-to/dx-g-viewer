@@ -38,7 +38,7 @@
 
 /* 開く動き: 下の層=静止画像(動かさない部分) / 上の層=動く部分(レーダー・折れ線)だけを見せるSVG */
 .dd-stage { position: relative; }
-.dd-anim { position: absolute; left: 0; top: 0; pointer-events: none; }
+.dd-anim { position: absolute; left: 0; top: 0; pointer-events: none; transform-origin: 0 0; }   /* 倍率は、下の画像に合わせて、JSが付ける */
 /* 動きのあと: 完成した画像(保存用)を、ほぼ透明にして、重ねる(見た目は、下の層+動いたSVGのまま。右クリック・長押しの保存と、クリック・タップの吹き出しは、この画像が受ける) */
 .dd-img.dd-save { position: absolute; left: 0; top: 0; z-index: 2; opacity: .01; }
 /* 下の層の静止画像(レーダーやグラフがない)は、右クリック・長押しの対象にしない: 万一、保存用の画像より先に見えても、中途半端な絵が、保存されないように */

@@ -873,6 +873,14 @@ export async function openDetail(record, all, opts = {}) {
     stage.className = "dd-stage";
     stage.append(base, holder);
     wrap.append(stage);
+    // 下の層の画像は、場所が足りないと縮む(max-width: 100%。窓を狭めたとき・スクロールバーが出たとき)。上の層(動くSVG)は、大きさを数値で指定しているので、
+    // 同じ倍率で縮めて、重ね続ける(以前は、画像だけが縮み、レーダーと折れ線が、元の大きさのまま、ずれた)。大きさの数値は変えず、表示の倍率だけを合わせる
+    const fitLayers = () => {
+      const k = base.getBoundingClientRect().width / Math.round(width * zoom);
+      if (k > 0) holder.style.transform = Math.abs(k - 1) < 0.001 ? "" : `scale(${k})`;
+    };
+    if (window.ResizeObserver) new ResizeObserver(fitLayers).observe(base);
+    fitLayers();
     showBtn();
     // 動きは、すぐ始める(完成した画像の生成を、待たない)。完成した画像(保存用)は、できしだい、ほぼ透明にして、一番上に重ねる。
     // できるまでの間(動きの最初の約0.4秒)は、下の層の静止画像を保存の対象から外してある(detail.css)ので、レーダーやグラフのない絵が、保存されることはない
