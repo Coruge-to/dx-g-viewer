@@ -645,13 +645,16 @@ function onResize() {
   clearTimeout(resizeTimer);
   if (!current || pinched()) return;
   if ((current.opts.layout ?? autoLayout()) !== current.layout) return rebuild();   // PC用⇔スマホ用の境目を越えた: すぐ作り直す
-  resizeTimer = setTimeout(onResizeSettled, 150);                                   // 表示の倍率だけの変化: 幅の変化が止まってから
+  current.resize();                                                                 // 表示の倍率の変化: その場で、大きさを合わせる(縮小も拡大も)
+  resizeTimer = setTimeout(onResizeSettled, 150);
 }
+// 幅の変化が止まったあと: 拡大して、画像の解像度が足りなくなったときだけ、作り直す
 function onResizeSettled() {
   if (!current || pinched()) return;
-  if (current.animating) { resizeTimer = setTimeout(onResizeSettled, 150); return; }   // 動きの間は、重ねた層が一緒に縮むので、終わるまで待つ
-  if (Math.abs(displayZoom(current.layout) - current.zoom) >= 0.005) rebuild();   // 高さだけの変化などは、何もしない
+  if (current.animating) { resizeTimer = setTimeout(onResizeSettled, 150); return; }   // 動きの間は、重ねた層が一緒に拡大・縮小するので、終わるまで待つ
+  if (!current.opts.scale && scaleFor(current.zoom) > current.scale) rebuild();
 }
+const scaleFor = (zoom) => Math.max(2, Math.ceil(zoom * (window.devicePixelRatio || 1)));   // 画像の解像度の倍率
 // もう片方(PC用⇔スマホ用)の画像を、開く動きのあとに、先に作っておく(境目を越えたとき、すぐ差し替えられる)。
 // 画面の長い辺が1000pxに届かない端末(スマホ)は、境目を越えないので、作らない
 function prepareOtherLayout(token) {
@@ -659,7 +662,7 @@ function prepareOtherLayout(token) {
   setTimeout(() => {
     if (token !== openToken || !current || current.opts.layout) return;
     const layout = current.layout === "wide" ? "narrow" : "wide";
-    const scale = current.opts.scale ?? Math.max(2, Math.ceil(window.devicePixelRatio || 1));   // 境目の付近の倍率は1
+    const scale = current.opts.scale ?? scaleFor(1);   // 境目の付近の倍率は1
     const key = `${layout}@${scale}`;
     if (current.pngs[key]) return;
     const { svg, width, height } = buildDetailSVG(current.record, current.all, { layout });
@@ -716,8 +719,9 @@ function attachHover(wrap, img, hot, zoom) {
     const tw = tip.offsetWidth, th = tip.offsetHeight;
     let left = px * k + 16;
     if (left + tw > r.width) left = px * k - 16 - tw;
-    tip.style.left = `${Math.max(0, left)}px`;
-    tip.style.top = `${clamp(py * k - th / 2, 0, r.height - th)}px`;
+    // 位置は、画像に対する割合で指定する(画面の大きさが変わっても、同じ点のそばに残る)
+    tip.style.left = `${(Math.max(0, left) / r.width) * 100}%`;
+    tip.style.top = `${(clamp(py * k - th / 2, 0, r.height - th) / r.height) * 100}%`;
   };
   const onMove = (e) => {
     const r = img.getBoundingClientRect();
@@ -829,8 +833,9 @@ export async function openDetail(record, all, opts = {}) {
   const zoom = displayZoom(layout);
   current = { record, all, opts: { ...opts, replace: false }, layout, zoom, pngs: opts.replace && prev ? prev.pngs : {}, animating: false, introT0: null };
   window.addEventListener("resize", onResize);
-  const scale = opts.scale ?? Math.max(2, Math.ceil(zoom * (window.devicePixelRatio || 1)));
-  const px = `${Math.round(width * zoom)}px`;
+  const scale = opts.scale ?? scaleFor(zoom);
+  let px = `${Math.round(width * zoom)}px`;   // 画面上の表示の幅。開いている間に幅が変わると、current.resize() が書き換える
+  current.scale = scale;
   overlay = document.createElement("div");
   overlay.className = "dd-overlay";
   const wrap = document.createElement("div");
@@ -848,6 +853,14 @@ export async function openDetail(record, all, opts = {}) {
   overlay.style.background = "transparent";
   const showBtn = () => { btn.style.visibility = ""; overlay.style.background = ""; dropStale(); };
   const mkImg = (url, alt) => { const i = new Image(); i.className = "dd-img"; i.alt = alt; i.style.width = px; i.src = url; return i; };
+  const me = current;
+  me.resize = () => {   // 画像は作り直さず、表示の大きさだけを、今の幅に合わせる(動くSVGの層は、下の画像の幅を見て、同じ倍率になる)
+    const z = displayZoom(layout);
+    if (Math.abs(z - me.zoom) < 0.0005) return;
+    me.zoom = z; px = `${Math.round(width * z)}px`;
+    wrap.style.width = px; wrap.style.setProperty("--z", String(z));
+    wrap.querySelectorAll(".dd-img").forEach((i) => { i.style.width = px; });
+  };
   wrap.append(btn);
   overlay.appendChild(wrap);
   overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closeDetail(); });
@@ -928,6 +941,6 @@ export async function openDetail(record, all, opts = {}) {
   // 完成した画像(保存用)は、ほぼ透明にして、真上に重ねる。右クリック・長押しの保存と、マウスを乗せたときの吹き出しは、この画像で受ける。
   if (!img.isConnected) { if (stage) { img.classList.add("dd-save"); stage.append(img); } else wrap.append(img); }
   showBtn();
-  attachHover(wrap, img, hot, zoom);
+  attachHover(wrap, img, hot, me.zoom);
   prepareOtherLayout(token);
 }
