@@ -37,7 +37,8 @@ const FLAT_GAP = 1.0;    // ♭の前後の間隔(15pxの文字のとき。size 
 // 太らせる量は、端末の書体ごとに、棒の太さを測って決める(固定の太らせ量だと、書体が細い iPhone で、細すぎた)。
 // スマホ(画面幅1000px未満。表のスマホ版と同じ区切り)は、iPhone の実機で 0.5 がちょうどよかった。 PC は、0.5 だと太すぎ、Windows で今までの見た目(固定0.3px ≒ 0.35倍)がよかった(2026-11-23)。
 const FLAT_STEM_NARROW = 0.5, FLAT_STEM_WIDE = 0.35;
-const flatStem = () => (window.matchMedia?.("(min-width: 1000px)").matches ? FLAT_STEM_WIDE : FLAT_STEM_NARROW);
+let flatWide = true;   // いま組み立てている画面が、PC用か(buildDetailSVG が決める。もう片方を先に作るときも、その画面の太さになる)
+const flatStem = () => (flatWide ? FLAT_STEM_WIDE : FLAT_STEM_NARROW);
 // 字の範囲は、measureText の actualBoundingBox ではなく、実際に描いた絵のピクセルから測る。
 // (iPhone の Safari 系では、actualBoundingBoxLeft/Right が、字の範囲ではなく、送り幅いっぱい(0〜100)で返り、余白を削れなかった。 2026-11-22 に、実機で確認)
 function inkBox(ch) {
@@ -487,6 +488,7 @@ function songChartSVG(plays, currentId, x0, y0, W, H, p = "", cx = W / 2) {   //
 export function buildDetailSVG(r, all, { layout = "wide" } = {}) {
   const p = `d${++uid}_`;
   const wide = layout === "wide";
+  flatWide = wide;
   const LW = 450;                                   // 左半分の幅
   let s = "", y;
 
@@ -621,7 +623,7 @@ export async function renderDetailPNG(record, all, opts = {}) {
 // ---------- 開く / 閉じる ----------
 let overlay = null, objUrl = null, staticUrl = null, openToken = 0;
 // 開いている間に、画面の幅が変わったとき(PC⇔スマホの切り替え・端末の回転・窓の大きさの変更)に、作り直すための控え
-let current = null;     // いま開いている画面の { record, all, opts, layout, zoom }
+let current = null;     // いま開いている画面の { record, all, opts, layout, zoom, pngs(作った画像の控え), animating, introT0 }
 let stale = null;       // 作り直しの間、画面に残しておく、前の画面(新しい画面が出たら消す)
 let resizeTimer = 0;
 // PC用とスマホ用の境目は、表の切り替え(viewer.css の @media の 1000px)と、同じ(2026-11-26に、900から1000へ。900〜999pxで、表はスマホ版なのに、この画面はPC用になっていた)
@@ -632,14 +634,37 @@ function dropStale() {
   stale.urls.forEach((u) => u && URL.revokeObjectURL(u));
   stale = null;
 }
+const pinched = () => (window.visualViewport?.scale ?? 1) > 1.01;   // 指で拡大して見ている間は、作り直さない
+// 作り直し。開く動きの途中なら、同じ時点から、新しい画面で、動きを続ける
+function rebuild() {
+  const { record, all, opts, animating, introT0 } = current;
+  const animate = animating && !(introT0 && performance.now() - introT0 >= INTRO.end * 1000);
+  openDetail(record, all, { ...opts, replace: true, animate, introT0: animate ? introT0 : null });
+}
 function onResize() {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
-    if (!current || (window.visualViewport?.scale ?? 1) > 1.01) return;   // 指で拡大して見ている間は、作り直さない
-    const layout = current.opts.layout ?? autoLayout();
-    if (layout === current.layout && Math.abs(displayZoom(layout) - current.zoom) < 0.005) return;   // 見え方が変わらない(高さだけの変化など)
-    openDetail(current.record, current.all, { ...current.opts, replace: true, animate: false });
-  }, 150);
+  if (!current || pinched()) return;
+  if ((current.opts.layout ?? autoLayout()) !== current.layout) return rebuild();   // PC用⇔スマホ用の境目を越えた: すぐ作り直す
+  resizeTimer = setTimeout(onResizeSettled, 150);                                   // 表示の倍率だけの変化: 幅の変化が止まってから
+}
+function onResizeSettled() {
+  if (!current || pinched()) return;
+  if (current.animating) { resizeTimer = setTimeout(onResizeSettled, 150); return; }   // 動きの間は、重ねた層が一緒に縮むので、終わるまで待つ
+  if (Math.abs(displayZoom(current.layout) - current.zoom) >= 0.005) rebuild();   // 高さだけの変化などは、何もしない
+}
+// もう片方(PC用⇔スマホ用)の画像を、開く動きのあとに、先に作っておく(境目を越えたとき、すぐ差し替えられる)。
+// 画面の長い辺が1000pxに届かない端末(スマホ)は、境目を越えないので、作らない
+function prepareOtherLayout(token) {
+  if (Math.max(window.screen.width, window.screen.height) < 1000) return;
+  setTimeout(() => {
+    if (token !== openToken || !current || current.opts.layout) return;
+    const layout = current.layout === "wide" ? "narrow" : "wide";
+    const scale = current.opts.scale ?? Math.max(2, Math.ceil(window.devicePixelRatio || 1));   // 境目の付近の倍率は1
+    const key = `${layout}@${scale}`;
+    if (current.pngs[key]) return;
+    const { svg, width, height } = buildDetailSVG(current.record, current.all, { layout });
+    current.pngs[key] = svgToPngBlob(svg, width, height, scale);
+  }, 200);
 }
 export function closeDetail() {
   openToken++;                                    // 動きの途中で閉じられたとき、続きの処理を止める
@@ -758,21 +783,18 @@ function refreshClip(rect) {
   if (user) { user.removeAttribute("clip-path"); user.setAttribute("clip-path", `url(#${id})`); }
 }
 // svgEl: 画面に置いた(インライン)SVG。anim: buildDetailSVG が返す部品の id。cancelled(): 途中で閉じられたかどうか
-function playIntro(svgEl, anim, cancelled) {
+function playIntro(svgEl, anim, cancelled, t0) {   // t0: 動きを始めた時刻(作り直したときは、前の画面の時刻を引き継ぐ)
   const q = (id) => svgEl.querySelector(`[id="${id}"]`);
   const poly = q(anim.radar.poly), nums = q(anim.radar.nums);
   const sec = anim.section && q(anim.section.rect), song = anim.song && q(anim.song.rect);
   const { cx, cy } = anim.radar;
   const setRadar = (s) => poly.setAttribute("transform", s >= 1 ? "" : `translate(${cx} ${cy}) scale(${Math.max(s, 0.001)}) translate(${-cx} ${-cy})`);
-  // 最初の状態 (完成形が一瞬見えないよう、挿入と同時に設定する)
-  setRadar(0); nums.style.opacity = "0"; if (sec) sec.setAttribute("width", "0"); if (song) song.setAttribute("width", "0");
   const clamp01 = (v) => Math.min(1, Math.max(0, v));
   const total = INTRO.end;
   return new Promise((resolve) => {
-    const t0 = performance.now();
     const tick = () => {
       if (cancelled()) return resolve(false);
-      const t = (performance.now() - t0) / 1000;
+      const t = Math.max(0, (performance.now() - t0) / 1000);
       setRadar(easeTable(RADAR_EASE, clamp01((t - INTRO.radarStart) / (INTRO.end - INTRO.radarStart))));
       // 窓は、「最後の点が見え終わる幅(wEnd)」まで広げて、動きの終わりと、最後の点が現れるタイミングを、そろえる
       if (sec) { sec.setAttribute("width", String(anim.section.wEnd * clamp01((t - INTRO.sectionStart) / (INTRO.end - INTRO.sectionStart)))); refreshClip(sec); }
@@ -786,7 +808,7 @@ function playIntro(svgEl, anim, cancelled) {
       }
       requestAnimationFrame(tick);
     };
-    requestAnimationFrame(tick);
+    tick();   // 最初の1こまは、挿入と同時に描く(完成形や、空の絵が、一瞬出ないように)
   });
 }
 
@@ -794,6 +816,7 @@ function playIntro(svgEl, anim, cancelled) {
 // 構造: 下の層 = 動かさない部分(文字・点数・メーター・目盛りなど)を、最終の画像と同じ方法で作った静止画像 / 上の層 = 動く部分(レーダー・折れ線)だけを画面のSVGで重ねる。
 // 動きが終わったら、完成した画像に差し替える。文字は最初から最後まで同じ静止画像なので、切り替わっても位置がずれない。
 export async function openDetail(record, all, opts = {}) {
+  const prev = current;
   if (opts.replace && overlay) {
     // 作り直し: 前の画面は、新しい画面が出るまで、残しておく(閉じて開き直すと、一瞬消えて見える)。裏のページのスクロール停止は、そのまま
     if (stale) { overlay.remove(); [objUrl, staticUrl].forEach((u) => u && URL.revokeObjectURL(u)); }   // 作りかけの画面は捨てる
@@ -804,7 +827,7 @@ export async function openDetail(record, all, opts = {}) {
   const layout = opts.layout ?? autoLayout();
   const { svg, width, height, hot, anim } = buildDetailSVG(record, all, { layout });
   const zoom = displayZoom(layout);
-  current = { record, all, opts: { ...opts, replace: false }, layout, zoom };
+  current = { record, all, opts: { ...opts, replace: false }, layout, zoom, pngs: opts.replace && prev ? prev.pngs : {}, animating: false, introT0: null };
   window.addEventListener("resize", onResize);
   const scale = opts.scale ?? Math.max(2, Math.ceil(zoom * (window.devicePixelRatio || 1)));
   const px = `${Math.round(width * zoom)}px`;
@@ -841,11 +864,13 @@ export async function openDetail(record, all, opts = {}) {
   if (!gutterStable && scrollbarW > 0) document.body.style.paddingRight = scrollbarW + "px";
   // OSの「視覚効果を減らす」の設定は、無視して、動きを出す(約1秒の短い動き)。設定を尊重したいときは、opts.respectReducedMotion = true
   const animate = opts.animate !== false && !(opts.respectReducedMotion && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
-  const fullPromise = svgToPngBlob(svg, width, height, scale);                       // 完成した静止画像 (保存用・最終表示)
+  current.animating = animate; current.introT0 = opts.introT0 ?? null;
+  const key = `${layout}@${scale}`;
+  const pngs = current.pngs;
   // 完成した画像の準備: 動きの終わりを待たずに、できしだい、ほぼ透明にして、重ねる。動きの最中に、右クリック・長押しで保存しても、完成した絵が保存される
   const alt = `${record.contentsName} ${record.totalPoint}点の採点結果`;
-  const savePromise = (async () => {
-    const blob = await fullPromise;
+  const makeSave = async () => {
+    const blob = await (pngs[key] ?? (pngs[key] = svgToPngBlob(svg, width, height, scale)));   // 完成した静止画像 (保存用・最終表示)。作ってあれば、使い回す
     if (token !== openToken) return null;
     objUrl = URL.createObjectURL(blob);
     const im = mkImg(objUrl, alt);
@@ -853,7 +878,10 @@ export async function openDetail(record, all, opts = {}) {
     if (token !== openToken) return null;
     im.dataset.pxw = String(Math.round(width * scale)); im.dataset.pxh = String(Math.round(height * scale));
     return im;
-  })();
+  };
+  let saving = null;
+  const startSave = () => (saving ??= makeSave());
+  if (!(opts.replace && animate)) startSave();   // 動きの途中の作り直しでは、画面を先に出し、完成した画像は、そのあとに作る(切り替えを速くする)
   let stage = null;
   if (animate) {
     const staticSvg = svg.replace("</defs>", "</defs><style>[data-a]{display:none}</style>");   // 動く部分(data-a)を除いた静止画像
@@ -884,14 +912,22 @@ export async function openDetail(record, all, opts = {}) {
     showBtn();
     // 動きは、すぐ始める(完成した画像の生成を、待たない)。完成した画像(保存用)は、できしだい、ほぼ透明にして、一番上に重ねる。
     // できるまでの間(動きの最初の約0.4秒)は、下の層の静止画像を保存の対象から外してある(detail.css)ので、レーダーやグラフのない絵が、保存されることはない
-    savePromise.then((im) => { if (im && token === openToken && !im.isConnected) { im.classList.add("dd-save"); stage.append(im); } });
-    if (!(await playIntro(el, anim, () => token !== openToken))) return;
+    // 作り直しの間、この画面が「前の画面」として残っているあいだは、動きを続ける(止めると、一瞬固まって見える)
+    const mine = overlay;
+    const t0 = opts.introT0 ?? performance.now();
+    current.introT0 = t0;
+    const playing = playIntro(el, anim, () => token !== openToken && stale?.overlay !== mine, t0);
+    startSave().then((im) => { if (im && token === openToken && !im.isConnected) { im.classList.add("dd-save"); stage.append(im); } });
+    if (!(await playing)) return;
+    if (token === openToken) current.animating = false;
   }
-  const img = await savePromise;
+  if (token !== openToken) return;
+  const img = await startSave();
   if (!img || token !== openToken) return;
   // 動きが終わっても、下の層(静止画像)と上の層(動いたSVG)は、そのまま見せ続ける(完成した画像に差し替えると、線のにじみ方が変わって、切り替わりが見えるため)。
   // 完成した画像(保存用)は、ほぼ透明にして、真上に重ねる。右クリック・長押しの保存と、マウスを乗せたときの吹き出しは、この画像で受ける。
   if (!img.isConnected) { if (stage) { img.classList.add("dd-save"); stage.append(img); } else wrap.append(img); }
   showBtn();
   attachHover(wrap, img, hot, zoom);
+  prepareOtherLayout(token);
 }
